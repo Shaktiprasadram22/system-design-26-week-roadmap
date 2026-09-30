@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="300" viewBox="0 0 1120 300" role="img" aria-labelledby="title description">
+<title id="title">System design, step by step</title>
+<desc id="description">A reading guide connecting foundations, distributed systems, reliability, cloud, retrieval, and AI agents.</desc>
+<rect width="1120" height="300" rx="14" fill="#102d3d"/>
+<g font-family="DejaVu Sans, Arial, sans-serif">
+<text x="46" y="48" fill="#9dd5ca" font-size="13" font-weight="700" letter-spacing="2">THE PRODUCTION READING GUIDE</text>
+<text x="44" y="115" fill="#f7f3e9" font-size="46" font-weight="700">System design, step by step.</text>
+<text x="46" y="156" fill="#d4dfdf" font-size="19">Understand the idea. Follow the flow. Handle the failure.</text>
+<path d="M61 222 H975" stroke="#54717a" stroke-width="2"/>
+<g fill="#102d3d" stroke="#9dd5ca" stroke-width="2">
+<circle cx="61" cy="222" r="16"/><circle cx="244" cy="222" r="16"/>
+<circle cx="426" cy="222" r="16"/><circle cx="609" cy="222" r="16"/>
+<circle cx="792" cy="222" r="16"/><circle cx="975" cy="222" r="16"/>
+</g>
+<g fill="#f7f3e9" font-size="13" font-weight="700" text-anchor="middle">
+<text x="61" y="227">1</text><text x="244" y="227">2</text>
+<text x="426" y="227">3</text><text x="609" y="227">4</text>
+<text x="792" y="227">5</text><text x="975" y="227">6</text>
+</g>
+<g fill="#d4dfdf" font-size="14" text-anchor="middle">
+<text x="80" y="266">Foundations</text><text x="244" y="266">Distributed systems</text>
+<text x="426" y="266">Reliability</text><text x="609" y="266">Cloud</text>
+<text x="792" y="266">Retrieval</text><text x="975" y="266">AI agents</text>
+</g></g></svg>

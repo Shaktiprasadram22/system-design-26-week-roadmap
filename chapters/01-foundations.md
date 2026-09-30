@@ -1,107 +1,434 @@
-## Phase 1 — Foundations: weeks 1–4
+# Phase 1 · Foundations
 
-The goal is to understand what happens between a user clicking a button and the system returning a correct answer. Follow one request through the network, application, operating system, and database before introducing distributed infrastructure.
+**Weeks 1–4 · Topics 1–13**
 
-### 1. OSI & TCP/IP model
+[Roadmap](../roadmap.md) · [Glossary](../glossary.md) · [Next phase →](02-core-system-design.md)
 
-The OSI model separates communication into physical, data-link, network, transport, session, presentation, and application layers. TCP/IP groups these more practically into link, internet, transport, and application layers. Ethernet or Wi-Fi moves frames locally; IP routes packets between networks; TCP supplies an ordered byte stream with retransmission and congestion control; HTTP defines application messages. UDP sends datagrams without those TCP guarantees, although protocols built on UDP, such as QUIC, can provide reliability. A packet is a unit of network transmission; an HTTP request can span many packets.
+A checkout request crosses networks, application code, operating-system resources, and a database. Learn what each part guarantees before distributing it across many machines.
 
-**Production scenario.** A ShopStream checkout timeout can originate from failed DNS resolution, an unreachable IP route, a blocked TCP port, TLS negotiation, or slow application work. “The API is down” does not identify which layer failed. Diagnose from the outside inward so application engineers do not spend hours changing SQL for a network routing problem.
+**After this phase:** you can follow one request end to end, choose an API and datastore, protect an inventory update, and diagnose basic latency or resource failures.
 
-**Build and verify.** Trace a request with `dig`, `curl -v`, and a local packet capture. Explain which operations happen before HTTP, which connection is reused, and why a successful connection does not prove the checkout operation completed.
+> **Example context:** ShopStream is an illustrative marketplace used throughout this guide. Its scenarios describe realistic engineering decisions, not a claim about a particular company's infrastructure.
 
-### 2. HTTP / HTTPS / HTTP2 / HTTP3
+## In this chapter
 
-HTTP defines methods, status codes, headers, and message bodies. HTTPS adds authenticated encryption using TLS. Understand safe and idempotent methods, connection reuse, caching headers, redirects, and the difference between transport success and business success. HTTP/2 multiplexes streams over TCP, but lost TCP data can stall multiple streams. HTTP/3 maps HTTP over QUIC, which runs over UDP and supplies reliable streams plus integrated TLS; loss on one stream need not block unrelated streams. Neither version fixes an expensive query or an overloaded application. [HTTP/2 specification](https://www.rfc-editor.org/info/rfc9113/), [HTTP/3 specification](https://www.rfc-editor.org/rfc/rfc9114.html).
+| Network and APIs | Data and consistency | Operating systems |
+|---|---|---|
+| [1. OSI & TCP/IP model](#topic-1) | [6. Relational DBs (SQL)](#topic-6) | [11. Processes & threads](#topic-11) |
+| [2. HTTP / HTTPS / HTTP2 / HTTP3](#topic-2) | [7. NoSQL DBs](#topic-7) | [12. Memory management](#topic-12) |
+| [3. DNS & CDN](#topic-3) | [8. CAP theorem](#topic-8) | [13. I/O & file systems](#topic-13) |
+| [4. WebSockets & SSE](#topic-4) | [9. ACID vs BASE](#topic-9) | |
+| [5. REST vs GraphQL vs gRPC](#topic-5) | [10. Database indexing](#topic-10) | |
 
-**Production scenario.** Catalogue browsing transfers many independent thumbnails and API responses, making multiplexing useful. Checkout still needs request deadlines, safe retry rules, and meaningful errors. A `200` carrying an error-shaped body makes observability harder; a timeout after charging a card leaves the caller uncertain about the outcome.
+---
 
-**Build and verify.** Implement a resource endpoint with validation, correct status codes, an ETag, and conditional reads. Inspect response headers and compare cold versus reused connections. Demonstrate that repeating a GET does not mutate state.
+<a id="topic-1"></a>
+## 1. OSI & TCP/IP model
 
-### 3. DNS & CDN
+**Simple explanation**
 
-DNS translates names into records, including addresses. A recursive resolver consults cached information or follows the hierarchy through root, top-level-domain, and authoritative servers. TTL controls how long a cached answer can remain usable; changing DNS does not instantly change every client's destination. A content delivery network places delivery infrastructure near users and caches eligible content. Anycast advertises one address from multiple locations, allowing routing to select a reachable location; it does not guarantee the geographically closest server or establish application-level correctness. [DNS concepts](https://www.rfc-editor.org/info/rfc1034/).
+A network request is wrapped in several layers, like a letter placed inside addressed envelopes. HTTP describes the message your application understands. TCP moves an ordered stream of bytes. IP finds a route between networks. Ethernet or Wi-Fi carries data over the local connection. Separating those jobs helps you locate the cause of a failed request.
 
-**Production scenario.** ShopStream serves product photos through a CDN so a user in Bengaluru does not repeatedly fetch them from a distant origin. During an origin migration, old DNS answers and persistent connections can keep traffic arriving at the old deployment. Keep it working during the transition and measure both destinations.
+**Production explanation**
 
-**Build and verify.** Inspect authoritative and recursive DNS answers and their TTLs. Serve a versioned image with cache headers. Confirm a repeated request is served from a cache where available, and explain why reducing TTL immediately before migration may not affect already cached answers.
+The OSI model names seven layers: physical, data link, network, transport, session, presentation, and application. TCP/IP uses four practical groups: link, internet, transport, and application. These models organize responsibilities; real implementations do not always fit neatly into every box.
 
-### 4. WebSockets & SSE
+TCP retransmits lost data, preserves byte order, and controls sending rate. It does not preserve application message boundaries, so an application protocol must identify complete messages. UDP sends individual datagrams without TCP's reliability guarantees; a protocol above UDP can add reliability. IP packets can follow changing routes. One HTTP request can span multiple packets, and many requests may share one connection. A successful TCP connection proves that a transport path exists, not that a checkout transaction completed or a database is healthy.
 
-WebSockets provide bidirectional message exchange over a persistent connection. Server-sent events, or SSE, send server-to-client text events over HTTP; clients can send their own actions using ordinary HTTP requests. SSE supports event identifiers and reconnection, but resumable delivery requires server-side retention and replay logic. Neither protocol makes messages durable automatically. Long-lived connections need heartbeats, authentication renewal, bounded outgoing buffers, and reconnect handling. [SSE implementation guidance](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events).
+```mermaid
+flowchart LR
+    A["HTTP request"] --> B["TLS encryption"]
+    B --> C["TCP byte stream"]
+    C --> D["IP packets"]
+    D --> E["Ethernet or Wi-Fi frames"]
+```
 
-**Production scenario.** Order status updates and streaming support answers fit SSE because most traffic flows toward the browser. Live buyer–seller chat fits WebSockets because both sides send frequent messages. A disconnected mobile client must recover missed durable chat messages from storage; socket delivery alone is insufficient.
+*Arrows show how an HTTPS-over-TCP message is wrapped for transmission. HTTP/3 uses QUIC over UDP instead of this TCP path.*
 
-**Build and verify.** Implement an order-status SSE stream with sequential event IDs. Disconnect after event 3 and reconnect using the last received ID. Verify events 4 onward are recoverable, duplicates are harmless, and a deliberately slow client cannot consume unlimited server memory.
+**Production example**
 
-### 5. REST vs GraphQL vs gRPC
+In ShopStream, a buyer sees checkout time out. The engineer first checks name resolution, then whether the destination and port are reachable, then TLS negotiation, then application logs and database timing. If a firewall blocks the port, changing an SQL index cannot help. If HTTP reaches the application but inventory queries stall, packet retransmission statistics alone do not explain the delay.
 
-REST organizes APIs around resources and HTTP semantics. GraphQL lets clients select fields from a typed schema, useful when screens need different combinations of data. gRPC exposes typed remote procedures, commonly using Protocol Buffers and supporting streaming. Compare interoperability, schema evolution, caching, tooling, payload size, and operational complexity. GraphQL resolvers can create N+1 database queries, while one seemingly small query can demand substantial computation. gRPC deadlines and cancellation must propagate through the call chain. [GraphQL performance](https://graphql.org/learn/performance/), [gRPC core concepts](https://grpc.io/docs/what-is-grpc/core-concepts/).
+**Failure to handle**
 
-**Production scenario.** ShopStream exposes REST to external merchants, considers GraphQL for a mobile product screen combining inventory and reviews, and could use gRPC between internal high-volume services. These are choices for particular clients, not a requirement to operate three protocols.
+A service dashboard reports “API down” whenever a request fails, hiding the failing layer. Record separate DNS, connect, TLS, and application timings so responders can target the actual dependency.
 
-**Build and verify.** Design the same product lookup in all three styles on paper and implement one. Include pagination, authorization, validation, and backwards-compatible changes. Measure database query count when loading 20 products and demonstrate how batching prevents one extra query per product.
+**Try it**
 
-### 6. Relational DBs (SQL)
+Use `curl -v` against an HTTPS endpoint and inspect connection establishment, TLS, and HTTP separately. Compare a valid URL, a nonexistent hostname, and an unreachable port. Expected result: three different failure stages, with a clear explanation of which stages never ran.
 
-Relational databases store structured rows linked through keys. Normalization separates facts so one update does not require editing many contradictory copies; selective denormalization can simplify heavy reads. ACID describes atomicity, consistency of declared invariants, isolation between concurrent transactions, and durability under the configured failure model. Constraints, transactions, and indexes work together, but “uses SQL” does not automatically make application logic race-free. Isolation levels determine which concurrent anomalies remain possible. [PostgreSQL transaction isolation](https://www.postgresql.org/docs/current/transaction-iso.html).
+---
 
-**Production scenario.** ShopStream stores orders, order lines, inventory, and payment attempts in PostgreSQL. A conditional inventory update and order insert occur in one transaction. An external card processor cannot participate in that local transaction; coordinate payment separately with durable workflow state and idempotency. Store the price agreed at purchase time on the order line so later catalogue edits do not rewrite history.
+<a id="topic-2"></a>
+## 2. HTTP / HTTPS / HTTP2 / HTTP3
 
-**Build and verify.** Create tables with foreign keys, uniqueness constraints, and nonnegative stock. Send concurrent requests for the final item. Verify at most one reservation succeeds and failed transactions leave no partial order or negative inventory.
+**Simple explanation**
 
-### 7. NoSQL DBs
+HTTP is the language browsers and APIs use to exchange requests and responses. HTTPS protects that exchange with encryption and checks the server's identity. HTTP/2 and HTTP/3 improve how many exchanges share a connection. They change transport behavior; your application still decides what an order means and whether it can safely be repeated.
 
-NoSQL includes several families rather than one consistency model. Document databases such as MongoDB keep flexible structured documents; wide-column systems such as Cassandra organize data around partition access; key-value services such as DynamoDB emphasize key-based operations. Design around actual access patterns, partition distribution, item size, secondary indexes, and supported transaction semantics. Many NoSQL systems provide strong reads or transactions under defined conditions. DynamoDB, for example, distinguishes eventually consistent and strongly consistent reads, with restrictions that depend on the resource being queried. [DynamoDB read consistency](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html).
+**Production explanation**
 
-**Production scenario.** A document store can suit ShopStream catalogue attributes that vary between books and clothing. A high-volume activity history can suit time-bucketed, user-keyed partitions. Financial order invariants may still be simpler in a relational database. A single extremely popular seller can overload a poorly chosen partition key.
+HTTP carries methods, status codes, headers, and bodies. GET should be safe: requesting it should not intentionally change business state. Idempotency means repeating an operation has the same intended effect as applying it once; an arbitrary POST does not provide that automatically. Status codes and structured error bodies should distinguish invalid input, denied access, missing resources, and temporary failures.
 
-**Build and verify.** Write five required queries before choosing a datastore. Model each without full collection scans. Simulate a popular tenant and show whether its traffic concentrates on one partition; revise the key or add controlled bucketing where necessary.
+HTTP/2 multiplexes streams over TCP. A lost TCP segment can stall delivery across those streams. HTTP/3 uses QUIC over UDP, with reliable streams and TLS integrated into QUIC; loss affecting one stream need not block unrelated streams. Neither protocol removes database bottlenecks. Reuse connections, propagate deadlines, and make application retries explicit. TLS protects traffic between connection endpoints; terminating TLS at a proxy creates another connection whose protection must be configured separately. [HTTP/2 specification](https://www.rfc-editor.org/info/rfc9113/), [HTTP/3 specification](https://www.rfc-editor.org/rfc/rfc9114.html).
 
-### 8. CAP theorem
+**Production example**
 
-CAP says that during a network partition a distributed system cannot guarantee both linearizable consistency and availability as defined by the theorem. Consistency here means operations behave as though acting on one up-to-date copy; availability means requests to nonfailed nodes eventually receive responses. This is not the same as SQL constraint consistency or a monthly uptime percentage. A partition is lost or indefinitely delayed communication between components. Outside a partition, latency and consistency remain trade-offs, but the shorthand “always pick two of three” is misleading. [Gilbert and Lynch's CAP paper](https://groups.csail.mit.edu/tds/papers/Gilbert/Brewer2.pdf).
+ShopStream loads product data and several thumbnails. Multiplexing helps transfer these independent responses while connection reuse avoids repeated setup. Checkout has a different concern: a charge may succeed before the response disappears. A timeout therefore leaves the payment outcome unknown. The client retries with the same checkout idempotency key, and the server retrieves the original result rather than charging again.
 
-**Production scenario.** If two ShopStream regions cannot communicate, selling the same final item from both can violate inventory correctness. A design may reject or delay reservations where authoritative stock cannot be reached. Product descriptions can tolerate stale regional copies and remain readable. Choose semantics by operation rather than labeling the entire application CP or AP.
+**Failure to handle**
 
-**Build and verify.** Draw two regions with one item remaining. Disconnect them and specify the exact response to reads and writes in each. Identify which guarantee is relaxed, how clients see it, and how reconciliation works after connectivity returns.
+Returning `200 OK` for every failure makes monitoring and retry behavior unreliable. Use meaningful HTTP status codes, preserve a request identifier, and ensure payment retries follow the business idempotency contract.
 
-### 9. ACID vs BASE
+**Try it**
 
-ACID describes transactional guarantees. BASE—basically available, soft state, eventually consistent—is a broad approach to asynchronous convergence, not a precise opposing database specification. A system can use ACID within a service while publishing events that update other services eventually. Eventual consistency needs a convergence mechanism and a clear policy for conflicts, duplicates, and stale reads; it does not mean all updates magically arrive. Distinguish immutable business facts from derived views. [PostgreSQL transaction introduction](https://www.postgresql.org/docs/current/tutorial-transactions.html).
+Create a product endpoint that supports GET, validation errors, an ETag, and conditional reads. Repeat GET and send `If-None-Match`. Expected result: no data mutation, a `304` for unchanged content, and distinguishable status codes for invalid and missing resources.
 
-**Production scenario.** ShopStream commits an order and inventory reservation atomically. Search results, sales dashboards, and notification status follow asynchronously. A user should see their confirmed order immediately even if the analytics dashboard is seconds behind. Writing the order and then separately publishing its event can lose the event when the process crashes, so an outbox or equivalent reliable change capture closes that gap.
+---
 
-**Build and verify.** Maintain an ACID order table and an asynchronously updated sales summary. Pause the consumer, create an order, and document what each screen shows. Resume processing and verify convergence without inflating totals when an event is delivered twice.
+<a id="topic-3"></a>
+## 3. DNS & CDN
 
-### 10. Database indexing
+**Simple explanation**
 
-Indexes create alternate access paths at the cost of storage and write maintenance. B-tree indexes support many equality, range, and ordering queries; hash indexes primarily target equality. Composite indexes depend on column ordering and query shape, although optimizer capabilities vary by database and version. A useful index often starts with columns constrained by equality and continues with range or sort columns. Covering indexes can reduce table reads, but wider indexes cost more. Always inspect the actual execution plan and representative data. [PostgreSQL multicolumn indexes](https://www.postgresql.org/docs/current/indexes-multicolumn.html).
+DNS is the internet's lookup system: it helps turn a name such as `shop.example` into the records needed to reach a service. A CDN is a delivery network that keeps eligible content near users. DNS answers where to connect; a CDN can reduce how far a reusable image or file must travel.
 
-**Production scenario.** A merchant's latest orders query filters `tenant_id` and sorts by creation time. An index on `(tenant_id, created_at DESC, id DESC)` can support filtering and stable keyset pagination. An index only on `status` may be poor when almost every row has the same status. Tenant filtering also needs authorization; the index itself supplies no security.
+**Production explanation**
 
-**Build and verify.** Load at least 100,000 synthetic orders. Compare `EXPLAIN ANALYZE` before and after indexing, inspect scanned rows and sorting, and measure insert overhead. Verify pagination remains stable when several orders share one timestamp.
+A recursive DNS resolver uses cached records or follows referrals through root, top-level-domain, and authoritative servers. An authoritative server supplies the records for a domain. A record's TTL tells caches how long they may reuse it. Changing an authoritative record does not replace answers already cached elsewhere, and existing connections may continue using an earlier address.
 
-### 11. Processes & threads
+A CDN serves content through edge locations and fetches uncached objects from an origin. Cache eligibility, cache keys, and freshness rules determine whether reuse is correct. Anycast lets multiple locations advertise the same address; network routing selects a reachable path, which is not guaranteed to be the geographically nearest location. DNS and CDN failures have different remedies: one can prevent discovery, while the other can cause origin overload or serve an outdated object. [DNS concepts](https://www.rfc-editor.org/info/rfc1034/).
 
-A process has its own address space and resources. Threads within a process share memory and can therefore communicate cheaply, but require coordination around shared mutable state. Concurrency means multiple activities make progress over overlapping time; parallelism means executing simultaneously on multiple processing units. Async I/O can handle many waiting requests without dedicating one thread to every connection. CPU-heavy work still consumes processor time, and language runtimes differ in threading behavior. [Linux POSIX threads](https://man7.org/linux/man-pages/man7/pthreads.7.html).
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant R as DNS resolver
+    participant C as CDN edge
+    participant O as Origin
+    B->>R: Resolve image hostname
+    R-->>B: Return address
+    B->>C: Request versioned image
+    C->>O: Fetch image on cache miss
+    O-->>C: Image and cache policy
+    C-->>B: Return image
+```
 
-**Production scenario.** ShopStream handles ordinary API requests in an async service while a separate worker generates thumbnails. Running image transformations on the request event loop stalls unrelated requests. Unbounded threads or workers can exhaust memory, database connections, and file descriptors. A shared in-memory counter also stops being globally correct as soon as multiple processes handle requests.
+*The browser resolves a destination first. The edge contacts the origin only when it needs an eligible object that it cannot already serve.*
 
-**Build and verify.** Run mixed workloads containing fast requests and CPU-heavy jobs. Move heavy work into a bounded worker pool and compare tail latency. Demonstrate a race in a shared counter, then correct it with synchronization appropriate to the chosen runtime.
+**Production example**
 
-### 12. Memory management
+ShopStream serves public product photos from versioned URLs through a CDN. An origin migration changes DNS, but some clients still reach the old deployment using cached answers or persistent connections. Engineers keep both origins usable through the transition and observe their traffic. Lowering the TTL ahead of migration helps only after previously cached, longer-lived records expire.
 
-The stack holds call frames and local execution state; the heap holds dynamically allocated objects. Virtual memory maps process addresses to physical memory or backing storage, with page faults when required pages are not immediately available. Garbage collection reclaims unreachable objects in managed runtimes, but retained references still cause leaks and collection can introduce pauses. The operating system's page cache is useful memory consumption, not necessarily an application leak. Memory limits matter because swapping or termination can make a service fail abruptly. [Linux memory mapping](https://man7.org/linux/man-pages/man2/mmap.2.html).
+**Failure to handle**
 
-**Production scenario.** A ShopStream upload handler buffers a 200 MB file per request. Twenty simultaneous uploads can consume several gigabytes before normal application overhead. Streaming uploads with bounded buffers and concurrency limits avoids memory growth proportional to complete file sizes. Similar problems occur when a slow WebSocket client accumulates an unlimited outgoing buffer.
+Turning off the old origin immediately after updating DNS breaks clients still using the previous destination. Plan an overlap period, monitor residual traffic, and ensure the old deployment remains compatible during cutover.
 
-**Build and verify.** Compare buffered and streamed processing of a large synthetic file. Record peak resident memory, request latency, and concurrent upload behavior. Set a memory limit and demonstrate predictable rejection or throttling before the process is killed.
+**Try it**
 
-### 13. I/O & file systems
+Inspect a domain with `dig` and repeat the lookup to observe TTL behavior. Fetch a public versioned asset and inspect caching headers. Expected result: you can distinguish cached name resolution from cached content and explain why replacing either has a separate propagation window.
 
-Storage behavior depends on access patterns. HDDs suffer high seek costs; SSDs improve random access but still have finite throughput and latency. Buffered writes may reach the page cache before durable storage, so acknowledge persistence according to the database or filesystem's actual flush guarantees. Block storage exposes disk-like volumes; file storage exposes directories and files; object storage exposes keyed objects through an API. Object storage is suited to large immutable assets, not automatically to a database's small in-place writes. [Linux `fsync` semantics](https://man7.org/linux/man-pages/man2/fsync.2.html).
+---
 
-**Production scenario.** ShopStream stores transactional database files on suitable persistent storage and product images in object storage, keeping image metadata in SQL. A container's writable layer is not a safe sole copy of orders or uploads. Uploading a file successfully and creating its metadata are separate operations, so reconcile orphaned objects and incomplete records.
+<a id="topic-4"></a>
+## 4. WebSockets & SSE
 
-**Build and verify.** Implement a streamed upload, store a checksum and metadata, and retrieve the object by key. Restart the application and verify persistence. Simulate failure between object upload and metadata commit, then clean up or recover the incomplete workflow.
+**Simple explanation**
+
+Ordinary HTTP usually pairs one request with one response. WebSockets keep a connection open so both sides can send messages. Server-sent events, or SSE, keep an HTTP response open so the server can send text events to the browser. Use SSE for one-way updates; consider WebSockets when both sides communicate frequently.
+
+**Production explanation**
+
+Choose a protocol from the direction and frequency of communication, browser support, infrastructure behavior, and recovery requirements. SSE clients can send actions through ordinary HTTP requests and receive updates through the stream. Event IDs and reconnect support are useful, but the server must retain events and implement replay if missed updates matter.
+
+WebSockets offer bidirectional messages but do not automatically retain them or synchronize offline devices. Both designs need heartbeat or idle-timeout handling, connection limits, bounded outgoing buffers, and authentication checks. Long-lived connections can outlive a user's permission or token, so define renewal and revocation behavior. A slow recipient must not consume unlimited memory. Delivery through an active socket is different from durable acceptance: save important messages before acknowledging success and provide a history or cursor-based recovery path. [SSE implementation guidance](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events).
+
+**Production example**
+
+ShopStream streams order-state changes to a buyer using SSE because the browser mostly receives updates. Buyer–seller chat uses WebSockets for frequent two-way messages. When a mobile device disconnects, chat messages remain in durable storage. On reconnect, the client requests messages after its last saved conversation cursor, deduplicates them, and then resumes live updates without treating the socket as the only source of truth.
+
+**Failure to handle**
+
+A reconnecting client receives only new events and silently misses an order cancellation. Retain replayable events or return a current-state snapshot when the requested cursor is older than retained history.
+
+**Try it**
+
+Build an SSE stream with sequential event IDs and a small retained history. Disconnect after event three, create two events, then reconnect with the last ID. Expected result: missed events reappear, duplicates are harmless, and an expired cursor triggers explicit resynchronization.
+
+---
+
+<a id="topic-5"></a>
+## 5. REST vs GraphQL vs gRPC
+
+**Simple explanation**
+
+REST exposes resources such as products through HTTP endpoints. GraphQL lets a client ask for selected fields through a typed query schema. gRPC exposes typed remote operations and commonly encodes messages with Protocol Buffers. Each is a way to define an API contract. Choose one by the clients, access patterns, and operational needs.
+
+**Production explanation**
+
+REST benefits from familiar HTTP tools, cache semantics, and broad interoperability. GraphQL can reduce screen-specific overfetching, but a small-looking query may invoke many resolvers and expensive database work. Set complexity limits, paginate collections, and batch repeated lookups to avoid N+1 queries: one query for a list followed by another query for every item.
+
+gRPC supports unary calls and streaming with generated clients. Its typed contract can help internal services, but schema evolution, browser integration, deadlines, and cancellations still require design. None of the approaches inherently solves tenant authorization, retries, or data consistency. Apply authorization where protected objects are accessed, propagate request deadlines, and preserve compatible behavior when fields or methods evolve. Select a protocol for a concrete boundary instead of adopting multiple protocols merely to appear sophisticated. [GraphQL performance](https://graphql.org/learn/performance/), [gRPC core concepts](https://grpc.io/docs/what-is-grpc/core-concepts/).
+
+**Production example**
+
+ShopStream provides merchants with a REST product API because external developers need straightforward tooling. A mobile catalogue screen could use GraphQL when it requires different combinations of product, review, and availability fields. An internal high-volume service could use gRPC if typed clients and streaming justify it. The production decision compares measured query work, compatibility, and maintenance effort rather than assuming one protocol wins everywhere.
+
+**Failure to handle**
+
+Fetching twenty products triggers twenty extra review queries, saturating the database. Add per-request batching, inspect resolver query counts, and bound collection size and query complexity before exposing flexible queries to untrusted clients.
+
+**Try it**
+
+Sketch one product lookup in all three API styles, then implement the style your client needs. Include pagination and tenant checks. Expected result: loading twenty products has a bounded query count and unauthorized field or object access fails consistently.
+
+---
+
+<a id="topic-6"></a>
+## 6. Relational DBs (SQL)
+
+**Simple explanation**
+
+A relational database stores facts in tables and connects rows using keys. An order can reference a customer, while order lines reference products. Constraints prevent invalid relationships or duplicate identifiers. A transaction groups changes so they either commit together or roll back together. That grouping is essential when reserving stock and creating an order.
+
+**Production explanation**
+
+Normalization stores a fact once rather than maintaining contradictory copies; deliberate denormalization can make common reads cheaper. ACID describes atomic changes, preservation of declared invariants, isolation between concurrent transactions, and durability under the configured storage and failure model. Those guarantees depend on schema design, transaction boundaries, and isolation settings.
+
+A read of stock followed by an unrelated write can race with another checkout. Use a conditional update, appropriate row locking, or a suitable isolation strategy, and check whether the reservation actually succeeded. Keep the order insert in the same transaction. Isolation levels permit different concurrent behaviors; higher isolation can require retries of whole transactions. An external payment provider remains outside the local database transaction, so record workflow state and coordinate separately. Store purchase-time prices on order lines to preserve historical truth. [PostgreSQL transaction isolation](https://www.postgresql.org/docs/current/transaction-iso.html).
+
+```mermaid
+sequenceDiagram
+    participant A as Checkout API
+    participant D as Database
+    A->>D: Begin transaction
+    A->>D: Reserve stock if quantity remains
+    D-->>A: Report reservation result
+    A->>D: Insert order if reservation succeeded
+    A->>D: Commit both changes
+    D-->>A: Confirm commit
+```
+
+*Both database changes share one transaction. Payment coordination happens separately; a database commit does not claim that a card has been charged.*
+
+**Production example**
+
+ShopStream has one camera left. Two buyers checkout concurrently. A conditional inventory update succeeds for one buyer, while the other receives an out-of-stock result. The winning transaction also creates the pending order. If inserting the order fails, the stock change rolls back. Payment processing starts from the saved order state, using a stable key so a network retry cannot create another effective charge.
+
+**Failure to handle**
+
+Two handlers read stock as one and both create an order. Enforce the stock invariant in the database transaction, check affected-row counts, and retry only failures that the chosen isolation strategy permits.
+
+**Try it**
+
+Create orders and inventory tables with foreign keys, unique request keys, and nonnegative stock constraints. Send simultaneous requests for the final item. Expected result: one reservation succeeds, inventory never becomes negative, and failed transactions leave no partial order.
+
+---
+
+<a id="topic-7"></a>
+## 7. NoSQL DBs
+
+**Simple explanation**
+
+NoSQL describes several database families rather than one kind of database. Document stores keep structured documents. Key-value stores retrieve an item by its key. Wide-column stores organize records for partition-based access. Start with the questions your application must answer, then choose a model that serves those questions without scanning everything.
+
+**Production explanation**
+
+Model access patterns, write volume, item size, partition distribution, consistency needs, and transaction boundaries before choosing a product. A document may naturally hold variable product attributes, but frequently updated duplicated facts can become inconsistent. A partition key routes related data together; an overloaded key can concentrate more traffic than one partition can serve. Secondary indexes support other queries while adding write and storage costs.
+
+NoSQL does not mean “no transactions” or “always stale.” Guarantees vary by product and operation. DynamoDB distinguishes eventually consistent and strongly consistent reads; support depends on the resource and query path. Understand those boundaries instead of applying one label to every read. Plan schema evolution even in a flexible document model, and reject incompatible or oversized records before they disrupt consumers. Financial invariants may remain simpler in a relational model. [DynamoDB read consistency](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html).
+
+**Production example**
+
+ShopStream sells books, shoes, and electronics with different attributes. A document model makes those product details easy to represent. Activity history might instead use user-keyed, time-bucketed partitions for efficient recent-event queries. Orders still need carefully enforced financial and inventory rules. When one merchant becomes exceptionally popular, engineers review its partition traffic instead of assuming a large cluster guarantees even load.
+
+**Failure to handle**
+
+Every activity event uses the same merchant as its partition key, creating a hotspot. Measure traffic per key, introduce bounded buckets where access patterns permit, and account for the extra queries needed to merge results.
+
+**Try it**
+
+Write five required queries before designing a datastore schema. Map each to a key or index, then simulate a tenant generating most traffic. Expected result: queries avoid full scans, and the partition model exposes or controls concentration on that tenant.
+
+---
+
+<a id="topic-8"></a>
+## 8. CAP theorem
+
+**Simple explanation**
+
+Imagine two copies of an inventory database that cannot communicate. If both accept sales of the same final item, they may disagree. If one refuses sales until it can contact the authority, some requests cannot complete. CAP explains this conflict between one-copy consistency and availability when the network separates parts of a distributed system.
+
+**Production explanation**
+
+CAP's consistency means linearizability: completed operations appear to act on one current copy in an order consistent with their real-time relationships. Availability means requests reaching nonfailed nodes eventually complete in the theorem's sense. These definitions differ from SQL constraint consistency and a monthly uptime percentage.
+
+A partition is communication that is lost or indefinitely delayed between components. During that partition, a system cannot guarantee both properties for the same operations. “Always pick two of three” hides the essential condition and encourages vague product labels. Define behavior per operation and failure boundary. Inventory reservations may require one reachable authority, while product descriptions can tolerate stale regional reads. Outside partitions, coordination still creates latency and availability costs; CAP is not a complete performance model or a prescription for every database decision. [Gilbert and Lynch's CAP paper](https://groups.csail.mit.edu/tds/papers/Gilbert/Brewer2.pdf).
+
+```mermaid
+flowchart LR
+    A["Buyer in region A"] --> B["Reachable inventory authority"]
+    B --> C["Reserve final item"]
+    D["Buyer in region B"] --> E["Authority unreachable"]
+    E --> F["Delay or reject reservation"]
+```
+
+*The two paths show one policy during a partition: only the side that can reach the authority reserves inventory. Availability is reduced for the other buyer.*
+
+**Production example**
+
+ShopStream has one item whose stock authority is in region A. Region B loses connectivity to it. Buyers in B can still browse a replicated product description, but checkout reports that reservation is temporarily unavailable. This policy prevents both regions from independently selling the item. Once communication returns, authoritative state becomes reachable again; the system does not infer that rejected reservations secretly succeeded.
+
+**Failure to handle**
+
+Calling the whole application “AP” masks a checkout path that accepts conflicting reservations. Specify the exact read and write behavior under partition, and require a reconciliation rule wherever independent writes remain allowed.
+
+**Try it**
+
+Draw two regions and one remaining item, then remove their connection. Write the response for browsing and reservation in each region. Expected result: every operation has explicit semantics, and you can identify which CAP guarantee its partition policy relaxes.
+
+---
+
+<a id="topic-9"></a>
+## 9. ACID vs BASE
+
+**Simple explanation**
+
+ACID helps keep a group of local database changes correct together. BASE describes a broad approach where distributed views can lag and eventually converge. A confirmed order can be immediately correct in its database while a sales dashboard catches up later. These approaches often coexist because different parts of an application need different freshness guarantees.
+
+**Production explanation**
+
+ACID covers transaction atomicity, declared invariants, concurrency isolation, and durability. BASE stands for basically available, soft state, and eventually consistent; it is a general design description rather than a precise competing transaction specification. Do not assume that choosing one label determines every guarantee of a system.
+
+Separate authoritative facts from derived views. An order record may be authoritative, while search indexes and sales summaries are rebuilt from it. Eventual convergence requires durable propagation, retry, ordering or version rules, conflict handling, and idempotent consumers. “Eventually” without a recovery mechanism is wishful thinking. Define acceptable lag and what readers see while behind. A database commit followed by an unrelated broker publish leaves a crash gap; store an outbox event with the business change or use an equivalent reliable change-capture mechanism. [PostgreSQL transaction introduction](https://www.postgresql.org/docs/current/tutorial-transactions.html).
+
+**Production example**
+
+ShopStream commits the order and stock reservation together, so the buyer immediately sees the confirmed local business state. The search index and merchant sales dashboard update through asynchronous events. If analytics pauses, checkout remains correct while the dashboard shows a freshness indicator. After recovery, consumers replay pending events and deduplicate by event ID, so processing an event twice does not count the sale twice.
+
+**Failure to handle**
+
+The order commits, but the process crashes before publishing its event, leaving analytics permanently behind. Commit an outbox entry with the order and monitor both publication progress and consumer lag.
+
+**Try it**
+
+Create an order table and asynchronously updated sales summary. Pause the consumer, create orders, resume it, and replay an event. Expected result: orders stay visible during the pause, the summary converges, and duplicates leave totals unchanged.
+
+---
+
+<a id="topic-10"></a>
+## 10. Database indexing
+
+**Simple explanation**
+
+An index is an extra data structure that helps a database find matching rows without examining every row. It resembles a book's index: useful for some questions, useless for others. Indexes speed selected reads but consume space and require maintenance whenever relevant data changes. Choose them for actual queries, not every column.
+
+**Production explanation**
+
+B-tree indexes support many equality, range, and ordered queries. Hash indexes primarily target equality. A composite index stores several columns together, so column order and query shape matter. An equality filter followed by sort or range columns often forms a useful starting point, but planner capabilities and data distribution affect the result.
+
+A covering index can supply required fields with fewer table accesses, although extra columns increase size and write overhead. Low-selectivity filters may match enough rows that a table scan is cheaper. Use representative datasets and inspect actual execution plans, scanned rows, sort work, and elapsed time. For pagination, order by a stable unique tie-breaker as well as timestamp. An index improves access; it does not supply authorization or eliminate lock contention. Track regressions as data grows and tenant distributions change. [PostgreSQL multicolumn indexes](https://www.postgresql.org/docs/current/indexes-multicolumn.html).
+
+**Production example**
+
+ShopStream's merchant page asks for the latest fifty orders belonging to one tenant. An index on `(tenant_id, created_at DESC, id DESC)` can support filtering and stable keyset pagination. A lone index on `status` contributes little when almost every order has the same status. Engineers compare plans using realistic tenant sizes and measure write overhead before retaining extra indexes.
+
+**Failure to handle**
+
+A query performs a large scan and sort even though several indexes exist. Examine the complete filter and ordering requirements, correct the relevant index or query, and verify improvement with an actual execution plan.
+
+**Try it**
+
+Load 100,000 synthetic orders with uneven tenant sizes and repeated timestamps. Run `EXPLAIN ANALYZE` before and after adding a composite index. Expected result: reduced scanned work and sorting for the target query, stable pagination, and a measurable indexing cost on inserts.
+
+---
+
+<a id="topic-11"></a>
+## 11. Processes & threads
+
+**Simple explanation**
+
+A process is a running program with its own memory space. Threads are execution paths inside a process and usually share its memory. Concurrency means tasks make progress during overlapping time; parallelism means tasks execute simultaneously. An application waiting on network I/O has different scaling needs from one using every CPU core to resize images.
+
+**Production explanation**
+
+Shared memory makes thread communication convenient and creates races when multiple threads modify the same state. Use synchronization suitable for the runtime, while avoiding long lock-held work. Processes provide stronger memory separation but require explicit communication. Language runtimes differ in how threads execute and how garbage collection or interpreter locks affect parallel work.
+
+Async I/O lets a process handle many waiting connections without assigning a thread to each one. CPU-heavy work still occupies a processor and can block an event loop, so move it to a bounded worker pool or separate worker service. Bound thread counts, queued jobs, database connections, and open descriptors together. Adding concurrency beyond a shared resource's capacity increases waiting rather than useful throughput. An in-memory counter protects only one process unless a shared authority coordinates all replicas. [Linux POSIX threads](https://man7.org/linux/man-pages/man7/pthreads.7.html).
+
+**Production example**
+
+ShopStream's API mostly waits for database and network responses, while thumbnail generation performs CPU-heavy transformations. Running those transformations on the API event loop delays unrelated catalogue requests. A separate worker pool gives image work a concurrency limit. The API stores accepted jobs durably and returns without waiting for every image, keeping checkout capacity independent of a merchant's large media upload.
+
+**Failure to handle**
+
+An unbounded worker pool creates hundreds of database connections and exhausts memory. Set limits around the constrained resource, expose queue wait time, and reject or defer excess work before the process becomes unstable.
+
+**Try it**
+
+Mix fast API calls with CPU-heavy image jobs, then move image work into a bounded pool. Expected result: fast-request tail latency improves while worker utilization stays bounded. Also reproduce a shared-counter race and correct it with appropriate synchronization.
+
+---
+
+<a id="topic-12"></a>
+## 12. Memory management
+
+**Simple explanation**
+
+A program needs memory for active work and retained data. The stack commonly holds call frames; the heap holds dynamically allocated objects. Managed runtimes can reclaim unreachable objects through garbage collection, but objects still referenced remain alive. A cache, upload buffer, or outgoing message queue can therefore grow until the process runs out of memory.
+
+**Production explanation**
+
+Virtual memory maps a process's addresses to physical pages and backing storage. Page faults occur when required mappings or pages need work before access can continue. Garbage collection reduces manual cleanup responsibilities, but retained references still leak effective capacity and collection may introduce pauses.
+
+Measure resident memory, heap usage, allocation rate, retained objects, and pause duration rather than relying on one number. Operating-system page cache is often useful consumption, not proof of an application leak. Memory limits constrain the combined runtime, buffers, libraries, and application data. Streaming bounds the data held per request, while concurrency limits bound how many requests hold it at once. Backpressure makes producers slow down when consumers cannot keep up. Eviction, maximum object sizes, and timeout cleanup keep optional state from displacing essential request processing. [Linux memory mapping](https://man7.org/linux/man-pages/man2/mmap.2.html).
+
+**Production example**
+
+ShopStream buffers each 200 MB upload in memory. Twenty simultaneous uploads require about 4 GB for file contents alone, before normal application overhead. Streaming uploads through bounded buffers changes memory growth to depend mainly on buffer size and concurrency. A semaphore limits active transfers, and queued clients receive an explicit wait or rejection instead of causing unpredictable process termination.
+
+**Failure to handle**
+
+A disconnected client's outgoing chat buffer keeps accumulating messages. Bound the buffer, close overly slow connections, and require clients to recover durable messages through offline synchronization instead of retaining unlimited per-connection state.
+
+**Try it**
+
+Process the same large synthetic file with buffering and streaming, recording peak resident memory under concurrent uploads. Expected result: streamed memory remains tied to bounded buffers, and an explicit concurrency limit causes predictable throttling before the process exceeds its memory allowance.
+
+---
+
+<a id="topic-13"></a>
+## 13. I/O & file systems
+
+**Simple explanation**
+
+I/O moves data between your program and networks or storage. A successful write call does not always mean bytes are durable on disk. Block storage resembles a disk, file storage exposes directories and files, and object storage exposes named objects through an API. Choose the interface and durability policy for the data being stored.
+
+**Production explanation**
+
+Storage performance depends on sequential versus random access, request sizes, concurrency, and durability requirements. HDDs incur seek costs; SSDs reduce many random-access costs but still have finite throughput and latency. Buffered writes may reach the operating-system page cache before durable storage. Flush behavior, database logging, and the underlying storage contract determine what an acknowledged write survives.
+
+Block volumes can host database files; shared file storage offers filesystem access; object storage fits keyed assets accessed through its API. Object storage is not automatically a substitute for a database's small in-place writes. A container's writable layer should not be the only copy of durable business data. Uploading an object and committing its metadata are usually separate operations, so use a recoverable workflow with checksums, completion state, and reconciliation for objects or records left incomplete. [Linux `fsync` semantics](https://man7.org/linux/man-pages/man2/fsync.2.html).
+
+**Production example**
+
+ShopStream puts product images in object storage and image metadata in SQL. The upload workflow assigns a key, streams bytes, verifies the checksum, then marks the database record ready. If metadata persistence fails after upload, a reconciliation job identifies the unreferenced object. If the API restarts, ready images remain retrievable because storage is independent of the application's temporary filesystem.
+
+**Failure to handle**
+
+A container restart deletes uploads stored only inside its writable layer. Use persistent storage appropriate to the data, validate recovery after restarts, and remove temporary files only after the durable upload workflow has completed.
+
+**Try it**
+
+Implement a streamed upload with an object key, checksum, and metadata state. Restart the application and interrupt the workflow after object creation. Expected result: completed assets remain readable, while incomplete records or orphaned objects are recovered or cleaned up explicitly.
+
+---
+
+## Check your understanding
+
+- A checkout request timed out. Which observations distinguish network failure from an unknown payment outcome?
+- Why can a database transaction protect inventory without making an external payment atomic?
+- Which data can ShopStream serve stale, and which operations must reach an authority?
+- Why do indexes, more threads, and larger caches each introduce a cost?
+- How does a disconnected client recover durable updates without trusting a live connection?
+
+[← Roadmap](../roadmap.md) · [Glossary](../glossary.md) · [Continue to core system design →](02-core-system-design.md)

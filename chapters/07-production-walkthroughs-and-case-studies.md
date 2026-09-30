@@ -1,6 +1,28 @@
-## Worked production walkthrough: a checkout that survives failures
+# Production walkthroughs and case studies
 
-This walkthrough joins the networking, storage, scaling, messaging, reliability, and security chapters into one request. The scale assumptions are illustrative. The design goal is not merely to return a fast response: it is to preserve inventory, prevent duplicate effective charges, protect tenants, and recover every accepted order.
+[Home](../README.md) · [Roadmap](../roadmap.md) · [Glossary](../glossary.md) · [← AI production systems](06-agents-and-ai-production.md)
+
+**Follow the complete flow, then inspect what happens at its failure boundaries.**
+
+Read these after the phase chapters, or return to them whenever a concept feels disconnected. ShopStream is an illustrative marketplace. The six company accounts are documented examples with primary references.
+
+- [Checkout: one order through retries and failures](#checkout)
+- [Document Q&A: authorized evidence through the full pipeline](#document-qa)
+- [Six documented production case studies](#company-cases)
+- [Further reading](#further-reading)
+
+---
+
+<a id="checkout"></a>
+## Checkout: one order through retries and failures
+
+**Simple explanation**
+
+A checkout is a promise about stock and money. Clicking twice or losing a connection should not buy the same item twice. Save one logical order, reserve its stock safely, and use the same payment identity while discovering the payment outcome. Send receipts in the background.
+
+**Production explanation**
+
+Networking, storage, workflows, messaging, and recovery cooperate across several boundaries. A local transaction preserves local order/inventory state; the payment provider has a separate contract; durable workflow state reconciles uncertain outcomes. The numerical workload below is a teaching assumption. The business invariants must hold through the specified failures.
 
 ### Define the product contract
 
@@ -16,14 +38,18 @@ Suppose 10,000 daily orders each consume a 2 KB primary record. That is about 20
 
 Start with a modular application and background workers:
 
-```text
-Browser/mobile -> ingress -> catalogue and checkout modules
-                                  |-> PostgreSQL: business state
-                                  |-> Redis: reusable catalogue reads
-                                  `-> object storage: images/documents
-
-PostgreSQL order + outbox -> relay -> broker -> background workers
+```mermaid
+flowchart TD
+    Client["Browser or mobile"] --> API["Catalogue and checkout"]
+    API --> DB["Orders, stock, and outbox"]
+    API --> Cache["Reusable catalogue reads"]
+    API --> Objects["Product images and documents"]
+    DB --> Relay["Outbox relay"]
+    Relay --> Queue["Durable event broker"]
+    Queue --> Worker["Payment and event consumers"]
 ```
+
+The initial transaction records the pending order and a PaymentRequested outbox event. Its consumer starts payment processing. Later, payment confirmation and a PaymentConfirmed outbox event commit together; only confirmed-payment events authorize paid receipts and fulfillment. Publication and delivery can repeat at either stage.
 
 Add application instances behind ingress when a representative load test shows benefit. Allocate database connections across all instances and workers. For example, 20 replicas with a 30-connection pool imply up to 600 application connections before administrative or rollout overlap. A pool proxy reduces connection churn; it does not multiply database throughput. Monitor pool wait and transaction duration. [PgBouncer pooling modes](https://www.pgbouncer.org/features.html).
 
@@ -49,6 +75,27 @@ Keep external HTTP calls outside the inventory transaction. Waiting on a payment
 ### Coordinate payment and publication
 
 A durable workflow submits payment with a stable provider idempotency key derived from the logical operation. If the provider commits but its response is lost, retry with the same key or query/reconcile the operation according to the provider's contract. Several HTTP attempts can still produce one effective charge. A local “payment sent” boolean written after the HTTP call cannot protect against a crash between charge and database update. [Stripe's idempotent-request contract](https://docs.stripe.com/api/idempotent_requests).
+
+The lost-response case crosses the database and payment boundaries:
+
+```mermaid
+sequenceDiagram
+    participant C as Customer
+    participant A as Checkout API
+    participant D as Order database
+    participant W as Payment worker
+    participant P as Payment provider
+    C->>A: Submit checkout with operation key
+    A->>D: Commit reservation, order, and outbox
+    A-->>C: Return accepted order ID
+    W->>P: Submit payment with stable provider key
+    P--xW: Successful payment response is lost
+    W->>P: Retry or look up the same operation
+    P-->>W: Return the existing payment outcome
+    W->>D: Commit confirmation and PaymentConfirmed outbox
+```
+
+The lost response leaves the worker uncertain. A repeated call is an additional network attempt; provider idempotency or result lookup preserves one effective charge. Committing the confirmed state and its outgoing event together prevents a crash from leaving a paid order without downstream fulfillment work.
 
 Write state transitions explicitly: pending, reserved, payment-pending, confirmed, compensation-pending, and cancelled. Define how callbacks are authenticated and deduplicated, how delayed confirmation interacts with expiry, and who resolves ambiguous cases. A refund is a new compensating operation that can itself fail or require reconciliation.
 
@@ -79,7 +126,16 @@ Run failure tests with concrete expected behavior:
 
 Keep the measured timeline and result of each test. The application being reachable after a fault is weaker evidence than the business invariants still holding.
 
-## Worked production walkthrough: permission-aware document Q&A
+---
+
+<a id="document-qa"></a>
+## Document Q&A: evidence with permission checks
+
+**Simple explanation**
+
+Think of this as an assistant consulting the right handbook. It first checks which documents you may read, finds the relevant passages, and answers with references. Current order facts come from an authorized application tool. Missing evidence should produce an honest no-answer result.
+
+**Production explanation**
 
 The support assistant needs two separate truths: current account facts from authorized application APIs, and applicable policy text from documents. A language model proposes an answer using these inputs; it does not establish order ownership, change stock, or authorize a refund.
 
@@ -91,14 +147,18 @@ Publish a new index version after verification. Updating policies should superse
 
 ### Retrieve authorized evidence
 
-```text
-Question -> identity + resource permissions
-         -> permission-filtered lexical and vector retrieval
-         -> reranking -> bounded context with source references
-         -> model -> supported answer or no-answer response
-
-Current order facts -> authorized read-only application tool
+```mermaid
+flowchart TD
+    Q["Question"] --> Auth["Identity and current permissions"]
+    Auth --> Search["Permission-filtered retrieval"]
+    Search --> Rank["Rerank authorized evidence"]
+    Rank --> Context["Bounded context with references"]
+    Auth --> Tool["Authorized order facts"]
+    Tool --> Context
+    Context --> Answer["Answer with citations or abstain"]
 ```
+
+Only permitted documents and order facts enter the context. Citations let the reader inspect evidence; they do not replace correctness or freshness checks.
 
 Apply access filtering during retrieval and revalidate source access as needed before using results. Retrieving everyone's content and asking the model to hide private documents exposes unnecessary data and fails to establish a reliable authorization boundary. Permission changes and deletion must propagate into indexes and caches; a current authorization check also protects against stale derived access metadata. [Microsoft query-time security filtering](https://learn.microsoft.com/en-us/azure/search/search-security-trimming-for-azure-search).
 
@@ -120,7 +180,10 @@ Measure retrieval recall, whether generated claims are supported, whether the an
 
 Release a new prompt, index, model, or routing rule as a versioned change. Compare against the previous evaluation results and observe a limited rollout. A faster or cheaper answer is an improvement only when the product's quality and permission requirements still hold.
 
-## Documented production case studies
+---
+
+<a id="company-cases"></a>
+## Six documented production case studies
 
 These six examples describe systems at the publication time of their primary sources. They provide evidence for design lessons; the ShopStream labs remain simplified illustrative designs.
 
@@ -148,10 +211,15 @@ Netflix's 2014 FIT account explains that latency injection can cause cascading t
 
 Uber's two-tower recommendation account describes offline item embeddings, online user/query embeddings, approximate-nearest-neighbor candidate retrieval, and later ranking. Its integration with Michelangelo covers training, evaluation, deployment, serving, and Palette feature-store use. The article evaluates relevance and recall in session context alongside business measures. Review topics 69–70, 86, and 89: recommendations require a full data/model lifecycle and relevant evaluation, while a generative LLM is optional. [Uber's two-tower recommendation architecture](https://www.uber.com/us/en/blog/innovative-recommendation-applications-using-two-tower-embeddings/).
 
-## Using references without collecting tools
+---
+
+<a id="further-reading"></a>
+## Further reading
 
 Read the primary links beside each concept when you need a precise behavior or guarantee. For longer study, the source site's [Designing Data-Intensive Applications resource](https://dataintensive.net/), [Google SRE book](https://sre.google/sre-book/table-of-contents/), [AWS Well-Architected Framework](https://aws.amazon.com/architecture/well-architected/), and [Microsoft architecture patterns](https://learn.microsoft.com/en-us/azure/architecture/patterns/) complement the labs.
 
 The site's link labeled Gaurav Sen points to a different handle; the intended creator's channel is [Gaurav Sen, @gkcs](https://www.youtube.com/@gkcs). Several framework documentation URLs redirect to newer homes. Hystrix, TGI, and AutoGen are covered to explain the source curriculum; their current maintenance status is identified in the relevant topics. Verify current official documentation and pin versions when implementing a lab.
 
 For every design decision, record the requirement, tested workload, chosen guarantee, evidence, failure behavior, and reason to revisit it. That record is more useful in production than a diagram full of unexplained technology names.
+
+[Home](../README.md) · [Roadmap](../roadmap.md) · [Glossary](../glossary.md) · [← AI production systems](06-agents-and-ai-production.md)

@@ -1,113 +1,362 @@
-## Phase 5 — AI Fundamentals & RAG
+# Phase 5 · AI fundamentals and RAG
 
-The website assigns Weeks 21–23 to this phase. Use the marketplace's authorized support documents as the first AI dataset. Retrieval-augmented generation (RAG) retrieves relevant evidence and supplies it to a language model before generation. It improves access to current knowledge, but does not guarantee truthful answers or authorize access to data. The examples below describe a proposed ShopStream architecture, not a claimed deployment at a real company. Numerical acceptance criteria are teaching targets.
+[← Cloud and infrastructure](04-cloud-and-infrastructure.md) · [Roadmap](../roadmap.md) · [Glossary](../glossary.md) · [Next: Agents and production →](06-agents-and-ai-production.md)
 
-### 64. Transformer architecture
+**Weeks 21–23 · Topics 64–74**
 
-*Attention, embeddings, tokens.*
+Learn how a language model processes text, how to serve it, and how to supply useful evidence before it answers. By the end, you should be able to explain a document-search assistant from its token budget to its permission checks and evaluation results.
 
-A tokenizer converts text into identifiers from a vocabulary; tokens can be words, word fragments, punctuation, or other units. Embeddings turn those identifiers into vectors. Position information represents sequence order. Attention computes how strongly each token should incorporate information from other tokens, using query, key, and value projections. Multiple attention heads capture different relationships, and feed-forward layers transform the resulting representations. Residual connections and normalization help training. Decoder-only language models use causal attention so a position cannot read future tokens when predicting the next token. The original Transformer paper used an encoder–decoder architecture; today's models include several architectural variants. [Original Transformer paper](https://arxiv.org/abs/1706.03762).
+> **The running example:** ShopStream is an illustrative marketplace, not a claimed deployment at a real company. Its support assistant answers questions using approved return and shipping documents. RAG means *retrieval-augmented generation*: find relevant source material, then give it to a model. RAG improves access to evidence; it does not guarantee truth or authorize access.
 
-**Production scenario.** ShopStream asks a model to summarize a return policy. Attention lets the answer connect “30 days” with “unopened items,” even when those phrases appear in different sentences. This statistical relationship is useful, but it does not establish whether the policy is current, approved, or applicable to this customer. Those checks belong to retrieval and application logic.
+**Choose a topic**
 
-**Build and verify.** Tokenize English, Hindi, product identifiers, and JSON. Inspect token counts and implement a tiny causal-attention example. Verify that changing a future token cannot change an earlier position's output; explain why long documents consume more processing resources than short ones.
+| Model basics | Search and evidence |
+| --- | --- |
+| [64. Transformer architecture](#topic-64) | [69. Vector databases](#topic-69) |
+| [65. LLM inference pipeline](#topic-65) | [70. Embedding models](#topic-70) |
+| [66. Context windows & KV cache](#topic-66) | [71. Chunking strategies](#topic-71) |
+| [67. Model serving (vLLM, TGI)](#topic-67) | [72. Hybrid search](#topic-72) |
+| [68. Prompt engineering](#topic-68) | [73. RAG evaluation](#topic-73) |
+| | [74. Advanced RAG patterns](#topic-74) |
 
-### 65. LLM inference pipeline
+---
 
-*Tokenization → decode → output.*
+<a id="topic-64"></a>
+## 64. Transformer architecture
 
-An inference request passes through validation, tokenization, scheduling, model execution, decoding, and output serialization. For a conventional autoregressive Transformer, **prefill** processes the input prompt and produces reusable attention state; **decode** then generates new tokens sequentially. A decoding policy chooses from predicted token probabilities: greedy selection chooses the highest probability, while sampling introduces controlled variation. Generation stops at a termination token, configured limit, cancellation, or service deadline. Chat models also require the correct message template. These stages mean tokenization, model decoding, and conversion of tokens back into text are distinct operations. [Hugging Face text generation guide](https://huggingface.co/docs/transformers/main/llm_tutorial).
+**Simple explanation**
 
-**Production scenario.** ShopStream's support assistant receives a question, retrieves policy evidence, constructs a prompt, and streams its answer. Measure queue time and **time to first token (TTFT)** separately from inter-token latency and complete-response latency. A response that begins quickly but emits tokens slowly feels different from one that waits before producing a fast burst. Retrieval can dominate TTFT even when model serving is efficient.
+A Transformer turns pieces of text into numbers and repeatedly mixes information between them. Its attention mechanism helps connect related words, even when they are far apart. In “return unopened items within 30 days,” the model can connect the deadline with the condition. This learned relationship helps predict useful text; it does not prove the statement is correct.
 
-**Build and verify.** Instrument those stages independently. Compare short and long prompts with equal output limits, then compare short and long outputs. Cancel a stream halfway through and verify that backend generation stops, capacity is released, and the conversation records an interrupted response.
+**Production explanation**
 
-### 66. Context windows & KV cache
+A tokenizer maps text to vocabulary identifiers called tokens. Embeddings map those identifiers to vectors, while position information represents their order. Attention uses query, key, and value projections to combine information from other positions; multiple heads learn different relationships. Feed-forward layers, normalization, and residual connections further transform these representations. Decoder-only language models use causal attention: a position cannot read future tokens when predicting the next token. The original Transformer used an encoder–decoder design, so “Transformer” does not mean every model has the same architecture. Model weights, tokenizer, chat template, context limit, and serving implementation must agree. Test the complete combination rather than assuming an interchangeable text-in/text-out interface. [Original Transformer paper](https://arxiv.org/abs/1706.03762).
 
-*Memory management in LLMs.*
+```mermaid
+flowchart LR
+    A[Text] --> B[Token identifiers]
+    B --> C[Embeddings and positions]
+    C --> D[Attention and transformations]
+    D --> E[Next-token probabilities]
+```
 
-The context window bounds the tokens a model can process for an interaction, subject to the model and serving configuration. System instructions, conversation history, retrieved passages, tool results, and generated output compete for that budget. A larger advertised limit does not guarantee that every fact in a long prompt will be used reliably. A **key–value cache** stores attention projections from previous tokens so decoding can reuse them. It improves computation efficiency while consuming memory. Cache memory generally grows with active sequence count and sequence length; architecture, precision, attention heads, sliding-window behavior, and parallelism affect the exact size. [Hugging Face cache strategies](https://huggingface.co/docs/transformers/main/kv_cache).
+*The arrows show the simplified path from text to predictions. Repeated predictions become generated text.*
 
-**Production scenario.** ShopStream retains the last few conversational turns, a summary, and selected policy excerpts. Sending every historical message would increase prefill work, crowd out evidence, and reduce concurrent GPU capacity. The application reserves output space before adding retrieved passages. It preserves exact order identifiers in structured state because a lossy summary might omit them.
+**Production example**
 
-**Build and verify.** Create a token-budget allocator with priorities and explicit truncation rules. Load-test increasing conversation lengths while recording KV memory and concurrency. Verify that over-budget requests produce a controlled result, and that critical identifiers and required evidence survive summarization and pruning.
+ShopStream asks a model to summarize a return policy. Attention can connect “30 days” in one sentence to “unopened items” in another. The application still retrieves the approved policy version and checks which policy applies to the order. A fluent summary based on an expired document remains a business error, even when the model handles the sentence relationships correctly.
 
-### 67. Model serving (vLLM, TGI)
+**Failure to handle**
 
-*Batching, quantization, VRAM.*
+A serving upgrade loads the right weights with the wrong tokenizer or chat template. Answers deteriorate without an obvious API error. Pin compatible artifacts together and run representative quality checks before promoting the deployment.
 
-Model serving turns inference code into an admission-controlled service. GPU memory must accommodate model weights, KV caches, temporary workspaces, and runtime overhead. Weight size alone is insufficient for capacity planning. Continuous batching allows new requests to join as others finish; scheduling must balance throughput against interactive latency. Quantization reduces numerical precision to save memory or compute, but requires compatible hardware and kernels, and quality must be re-evaluated. vLLM documents continuous batching, PagedAttention, prefix caching, and quantization support. Hugging Face currently marks TGI as being in maintenance mode and points users toward alternative engines, including vLLM and SGLang. [vLLM documentation](https://docs.vllm.ai/en/latest/), [TGI status](https://huggingface.co/docs/text-generation-inference/main/en/index).
+**Try it**
 
-**Production scenario.** ShopStream runs interactive support traffic separately from overnight catalog enrichment. Long batch prompts can otherwise occupy resources needed for chat. Admission limits account for token demand and available cache memory; overload produces bounded queueing or a retryable response. Replica readiness waits for model loading and a warm-up request.
+Tokenize English, Hindi, SKU codes, and JSON. Compare token counts with character counts. In a tiny causal-attention demonstration, change a future token and verify earlier-position outputs remain unchanged; then explain why character count alone cannot predict prompt capacity.
 
-**Build and verify.** Serve one appropriately licensed small model. Benchmark concurrency, prompt lengths, output lengths, TTFT, token latency, and memory. Compare two supported precisions on the same evaluation questions. Pick the configuration that meets measured quality and latency targets, then test overload and replica restart behavior.
+---
 
-### 68. Prompt engineering
+<a id="topic-65"></a>
+## 65. LLM inference pipeline
 
-*Zero-shot, few-shot, CoT, ReAct.*
+**Simple explanation**
 
-Zero-shot prompting describes the task without examples. Few-shot prompting adds representative input/output demonstrations, including difficult cases. Chain-of-thought (CoT) research explores intermediate reasoning demonstrations; it does not mean every production API should demand or expose a model's private reasoning. Request concise explanations or verifiable calculations when useful, and judge correctness through evidence and outcomes. ReAct combines reasoning with actions and observations, enabling iterative tool use. It introduces an execution loop that needs validation, time limits, and tool controls. Prompt design also specifies source boundaries, expected output structure, uncertainty behavior, and examples of refusal when evidence is missing. [CoT paper](https://arxiv.org/abs/2201.11903), [ReAct paper](https://arxiv.org/abs/2210.03629).
+Inference is the process of asking a trained model for an answer. First the service prepares and reads your prompt; then the model generates new tokens one step at a time. A response can feel slow because it waits before starting, because it generates slowly, or because another stage, such as document search, takes too long.
 
-**Production scenario.** ShopStream asks the assistant to answer from supplied policy excerpts, cite document versions, and request clarification when the purchase date is unknown. A few examples distinguish “eligible,” “ineligible,” and “insufficient information.” Retrieved text remains untrusted data; a passage telling the model to issue a refund cannot confer that permission.
+**Production explanation**
 
-**Build and verify.** Version three prompt variants against a fixed set of questions and reference outcomes. Include ambiguous dates, missing evidence, contradictory policies, and injected instructions. Validate structured output with a schema and compare answer accuracy, unsupported claims, latency, and token cost before selecting a prompt.
+A request passes through validation, tokenization, scheduling, execution, decoding, and serialization. For a conventional autoregressive Transformer, **prefill** processes the prompt and constructs reusable attention state. **Decode** generates subsequent tokens, using a policy such as greedy selection or sampling. Tokenization and converting output tokens back into text are separate from model decoding. Stop conditions include an end token, output limit, cancellation, and a service deadline. Use the model's correct chat template and distinguish queue time, time to first token (TTFT), inter-token latency, and total latency. Measure both model-service latency and the user's complete request, which includes retrieval and network delivery. Cancellation must reach the inference worker; closing the browser alone does not necessarily release server capacity. [Hugging Face generation guide](https://huggingface.co/docs/transformers/main/llm_tutorial).
 
-### 69. Vector databases
+```mermaid
+flowchart LR
+    A[Validate and tokenize] --> B[Wait for capacity]
+    B --> C[Prefill prompt]
+    C --> D[Decode next token]
+    D --> E{Stop condition?}
+    E -->|No| D
+    E -->|Yes| F[Finish response]
+```
 
-*Pinecone, Qdrant, pgvector, FAISS.*
+*The loop represents sequential generation. Streaming can deliver each generated token before the whole response finishes.*
 
-Vector search finds nearby representations rather than only exact word matches. Approximate nearest-neighbor indexes trade some recall for lower search cost; exact search provides a useful small-dataset baseline. Pinecone and Qdrant provide vector-search services; pgvector adds vector storage and indexing to PostgreSQL. **FAISS is a similarity-search library**, not a complete database: an application must provide persistence lifecycle, metadata handling, authorization, replication, and operations around it. Beyond nearest neighbors, compare filtering, update/delete semantics, backups, index build cost, and operational ownership. [FAISS project](https://github.com/facebookresearch/faiss), [Qdrant filtering](https://qdrant.tech/documentation/search/filtering/).
+**Production example**
 
-**Production scenario.** ShopStream stores policy chunks with tenant, document version, language, and access metadata. The authenticated tenant and permitted document scope constrain retrieval **before passages enter reranking, prompts, logs, or caches**. Asking the generator to ignore unauthorized passages after retrieval is insufficient. Application authorization supplies the filter; a user-written query cannot broaden it. Deleting a document removes its vectors and invalidates dependent cached answers.
+ShopStream retrieves policy evidence, assembles the prompt, and streams an answer. A slow vector query increases the customer's wait before any text appears. A busy inference queue has a similar visible symptom but a different fix. Separate timing spans reveal whether to improve search, add capacity, shorten prompts, or change admission limits rather than guessing from total response time.
 
-**Build and verify.** Index a small corpus using pgvector or Qdrant and compare results with exact search. Measure recall and latency with selective filters. Insert similar documents for two tenants, attempt cross-tenant queries, and verify zero unauthorized candidates throughout the retrieval trace.
+**Failure to handle**
 
-### 70. Embedding models
+The customer cancels, but generation continues and occupies a slot. Propagate cancellation through the gateway to the worker, record the response as interrupted, and verify resources are eventually released even if cancellation delivery fails.
 
-*Choosing dimensions, similarity search.*
+**Try it**
 
-An embedding model maps a query or document into a vector whose geometry reflects the model's training objective. Cosine similarity, dot product, and Euclidean distance are different scoring choices; follow the model's documented normalization and metric assumptions. Query and document vectors must use a compatible embedding space. Dimensions affect storage and computation, but more dimensions do not automatically mean better task accuracy. Language coverage, domain vocabulary, maximum input length, licensing, and deployment cost matter. Sentence-BERT illustrates how separately computed sentence embeddings enable efficient semantic similarity comparisons. [Sentence-BERT paper](https://arxiv.org/abs/1908.10084).
+Compare short and long prompts with equal output limits, then short and long outputs with equal prompts. Record queue time, TTFT, and total time. Cancel midway and verify the worker stops and the saved conversation shows an interrupted response.
 
-**Production scenario.** ShopStream buyers ask “Can I get my money back?” while policies say “refund eligibility.” Embeddings help connect these expressions. Exact SKU codes and unusual legal terms may still need lexical search. When changing embedding models, ShopStream builds a new versioned index and re-embeds documents; mixing old and new vectors can silently destroy relevance even when their dimensions match.
+---
 
-**Build and verify.** Label relevant documents for multilingual and domain-specific questions. Compare two models using recall at a fixed retrieval depth, indexing throughput, query latency, and storage. Record model revision, dimension, preprocessing, and normalization with every index. Verify that incompatible query/index versions fail explicitly and that a new index can be rolled back.
+<a id="topic-66"></a>
+## 66. Context windows & KV cache
 
-### 71. Chunking strategies
+**Simple explanation**
 
-*Semantic vs fixed, chunk size.*
+The context window is the model's working space for one interaction. Instructions, conversation history, retrieved passages, tool results, and the answer all use that space. The KV cache is different: it stores reusable attention calculations during inference. More context can provide more evidence, but it also uses memory and may distract the model from important details.
 
-Chunking divides documents into retrieval units. Fixed token windows are simple and predictable, but can split an important condition from its exception. Sentence, heading, and semantic approaches preserve more structure at additional parsing or embedding cost. Small chunks can improve specificity while losing surrounding meaning; large chunks provide context but dilute retrieval and consume the generation budget. Overlap preserves boundary information but increases duplicates, index size, and retrieved redundancy. Tables, code, and forms often require specialized handling. LlamaIndex's sentence splitter prefers complete sentences and phrases while enforcing configured chunk limits and overlap. [Sentence splitter implementation](https://developers.llamaindex.ai/python/framework-api-reference/node_parsers/sentence_splitter/).
+**Production explanation**
 
-**Production scenario.** ShopStream's policy says returns are allowed within 30 days, followed by an exception for personalized products. A naive boundary separates those sentences and produces misleading evidence. Preserve the section heading and exception, and attach page number, source URI, document version, and parent-section identity. Document-level permissions must propagate to every chunk.
+Budget tokens before submitting a request. Reserve space for output, required instructions, and essential identifiers; add history and evidence within the remaining allowance. The exact input/output constraints depend on the model and endpoint. A large advertised context limit does not guarantee reliable use of every fact. A key–value cache holds attention projections so decoding can reuse work instead of recomputing previous tokens. Its memory generally grows with active sequences and sequence length; precision, architecture, attention heads, sliding windows, and parallelism change the exact amount. Distinguish this computation cache from a cache of completed answers. Summaries can reduce prompt length but lose details, so keep authoritative identifiers and action state in structured application storage. Measure memory under representative concurrent traffic. [Hugging Face cache strategies](https://huggingface.co/docs/transformers/main/kv_cache).
 
-**Build and verify.** Compare token windows, sentence-aware splitting, and section-aware splitting on the same documents. Include PDF tables, scanned pages, and boundary-spanning questions. Measure retrieval recall, duplicate passages, context tokens, and answer correctness. Select sizes from those results, then verify every returned chunk resolves to a readable, authorized source location.
+```mermaid
+flowchart TD
+    A[Available context budget] --> B[Required instructions]
+    A --> C[Reserved output]
+    A --> D[Essential order facts]
+    A --> E[Selected history and evidence]
+    E --> F[Prune or summarize excess]
+```
 
-### 72. Hybrid search
+*The branches show competing uses of one budget. Output space must be reserved before optional context fills the remainder.*
 
-*BM25 + vector, reranking.*
+**Production example**
 
-BM25 is a lexical ranking method that considers term matches, frequency, and document length. Dense retrieval captures semantic resemblance. Hybrid search combines their candidate sets to cover both exact identifiers and paraphrases. Their raw scores are not naturally comparable; reciprocal rank fusion (RRF) combines ranked positions instead. A reranker then evaluates a query together with each candidate, usually at greater cost than independent embeddings, to improve the final ordering. Candidate depth and reranker capacity need explicit limits. More candidates can improve recall while increasing latency and inference cost. [Elasticsearch RRF documentation](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion).
+ShopStream retains recent turns, a conversation summary, and selected policy excerpts. The current order ID lives in structured thread state because a summary may omit or alter it. During a busy sale, long conversations increase cache memory and reduce the number of simultaneous requests the GPU can serve. Prompt limits therefore protect both answer quality and shared serving capacity.
 
-**Production scenario.** “Refund for SKU AB-104” contains an exact identifier and a semantic intent. ShopStream runs tenant-filtered lexical and vector retrieval in parallel, fuses the authorized candidates, removes duplicates, and reranks a bounded shortlist. A vector-only approach might confuse similar products; a lexical-only approach might miss a policy phrased as “reimbursement.” Both retrieval branches enforce the same permission scope.
+**Failure to handle**
 
-**Build and verify.** Implement lexical-only, vector-only, and hybrid baselines with identical datasets and access controls. Measure recall, ranking quality, p95 retrieval latency, and reranking cost for identifiers, paraphrases, and misspellings. Keep reranking only if its measured improvement justifies the additional stage.
+Automatic truncation removes the policy exception while retaining the main rule. Allocate context by priority and preserve complete evidence units. If required evidence does not fit, narrow the question or use a controlled escalation.
 
-### 73. RAG evaluation
+**Try it**
 
-*Faithfulness, answer relevance, RAGAS.*
+Build a token-budget table for one support question. Increase history length and record accepted prompt size, memory, and concurrency. Verify pruning retains the order ID and exception, and oversized requests receive an understandable error or smaller evidence set.
 
-Evaluate retrieval and generation separately. Retrieval recall asks whether the necessary evidence was found; precision asks how much retrieved content is useful. Faithfulness asks whether the answer's claims are supported by retrieved context. Answer relevance asks whether it addresses the user's actual question. An answer can be faithful to an obsolete document and still be wrong, so also assess source currency, correctness, citation validity, and authorization. RAGAS provides automated evaluation metrics, including faithfulness; model-based judges have biases and errors, so calibrate them against human-reviewed examples. [RAGAS faithfulness documentation](https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/faithfulness/).
+---
 
-**Production scenario.** ShopStream creates a reviewed dataset covering ordinary questions, policy exceptions, missing answers, multilingual queries, and adversarial documents. A retrieval change passes offline evaluation before a limited rollout. Online monitoring tracks user corrections, escalations, successful support outcomes, and latency; a positive rating alone does not prove the policy answer was correct.
+<a id="topic-67"></a>
+## 67. Model serving (vLLM, TGI)
 
-**Build and verify.** Label required sources and expected answer claims for a teaching dataset of 100 questions. Run retrieval and answer evaluation for each change, inspect disagreements between judges and people, and classify failures by stage. Add tests for abstention and unauthorized retrieval, then verify citations support specific claims rather than merely pointing to related documents.
+**Simple explanation**
 
-### 74. Advanced RAG patterns
+A serving engine runs a model for many users. It decides which requests run together and manages scarce GPU memory. Batching helps share computation; quantization stores some numbers with less precision. Both can improve efficiency, but their value depends on hardware, request shapes, and whether the resulting answers remain good enough for the task.
 
-*HyDE, self-query, parent-child chunks.*
+**Production explanation**
 
-HyDE generates a hypothetical answer-like document and embeds it to retrieve real documents. Its generated text is a search aid, never authoritative evidence. Self-query retrieval turns user intent into a semantic query plus structured metadata constraints, such as language or effective date. Generated filters need schema validation; application-enforced tenant and permission constraints always remain mandatory. Parent-child retrieval searches small child chunks for precision and fetches an authorized larger parent section for explanation. These patterns solve different problems and can increase latency, token usage, and failure surface. [HyDE research paper](https://arxiv.org/abs/2212.10496).
+GPU capacity must cover weights, key–value caches, temporary workspaces, and runtime overhead. Fitting the weights does not prove a deployment can handle its intended traffic. Continuous batching lets requests enter as others finish, while scheduling balances throughput and interactive latency. Bound admission by token demand, concurrent sequences, and available memory; use bounded queues and explicit overload responses. Quantization requires supported models, hardware, and kernels, followed by quality evaluation. vLLM documents continuous batching, PagedAttention, prefix caching, and quantization. Hugging Face's TGI documentation currently marks it as in maintenance mode and points toward other engines, including vLLM and SGLang. Treat that status as a dated product decision, and verify supported versions when implementing. [vLLM documentation](https://docs.vllm.ai/en/latest/), [TGI maintenance notice](https://huggingface.co/docs/text-generation-inference/main/en/index).
 
-**Production scenario.** A ShopStream merchant asks, “What changed in the return policy this year?” Self-query extracts a date constraint, child chunks locate the revision, and parent sections supply surrounding exceptions. If HyDE proposes a nonexistent policy, only actual retrieved documents can support the response. Parent fetching repeats authorization checks and checks document versions; it cannot reveal an otherwise inaccessible section through an accessible child.
+**Production example**
 
-**Build and verify.** Start from the hybrid-search baseline and enable one pattern at a time. Measure gains on difficult questions and regressions on ordinary ones. Test malformed metadata filters and injected date constraints. Keep a pattern only when its evaluated accuracy improvement outweighs extra latency and cost.
+ShopStream separates customer chat from overnight product-description generation. Batch enrichment has long prompts and tolerates delay; chat needs a prompt first response. Independent capacity pools or enforced priorities prevent a catalog job from consuming every slot. A replica becomes ready only after loading and warm-up, and each traffic class has its own queue and latency measurements.
+
+**Failure to handle**
+
+A burst of long prompts exhausts cache memory even though average request count looks normal. Reject or queue within a fixed limit, reduce admitted token demand, and monitor memory and tail latency rather than requests alone.
+
+**Try it**
+
+Serve one small, appropriately licensed model. Benchmark two supported precisions with the same questions and traffic shapes. Compare quality, TTFT, token latency, and memory; then exceed capacity and verify bounded queueing, controlled errors, and successful recovery after load falls.
+
+---
+
+<a id="topic-68"></a>
+## 68. Prompt engineering
+
+**Simple explanation**
+
+A prompt describes what the model should do and what information it should use. Zero-shot prompting gives instructions; few-shot prompting adds examples. Clear examples teach the desired format and difficult distinctions. A good prompt also tells the assistant when information is missing, so it can ask a useful question instead of guessing a confident answer.
+
+**Production explanation**
+
+Version prompts as application behavior, with representative evaluations before rollout. State the task, source boundaries, expected output schema, and uncertainty behavior. Few-shot examples should cover ordinary cases, exceptions, and insufficient information. Chain-of-thought research examines reasoning demonstrations; production applications can request concise explanations or verifiable calculations without requiring exposure of private model reasoning. ReAct combines reasoning, actions, and observations, introducing a tool-execution loop that needs limits and validation. Structured output still needs schema and business-rule checks: valid JSON can contain an invalid refund amount. Retrieved documents and tool results are untrusted data, so instructions inside them cannot grant permissions. Judge prompts by correctness, unsupported claims, latency, and cost instead of eloquence alone. [Chain-of-thought paper](https://arxiv.org/abs/2201.11903), [ReAct paper](https://arxiv.org/abs/2210.03629).
+
+**Production example**
+
+ShopStream asks the assistant to cite supplied policy versions and classify a return as eligible, ineligible, or needing more information. Examples show that a missing purchase date requires clarification. The model can draft an explanation; application code calculates dates and checks order facts. A document saying “issue a refund now” remains source text, never permission to execute a payment.
+
+**Failure to handle**
+
+A prompt improves ordinary answers but starts inventing missing dates. Include incomplete and contradictory cases in evaluation, require an explicit insufficient-information outcome, and prevent business actions when required facts have not been verified.
+
+**Try it**
+
+Compare three prompt versions on fixed questions with reviewed outcomes. Include missing dates, contradictory policies, and malicious instructions in documents. Validate output schemas and inspect unsupported claims. Select a version only if its measured improvement holds across the difficult cases.
+
+---
+
+<a id="topic-69"></a>
+## 69. Vector databases
+
+**Simple explanation**
+
+Vector search finds items with similar numerical representations. It can connect “money back” with “refund” even when the words differ. A vector database also manages stored records, metadata, and search indexes. FAISS is a search library rather than a complete database, so an application using it must supply the surrounding storage and operational features.
+
+**Production explanation**
+
+Start with exact nearest-neighbor search as a correctness baseline. Approximate indexes trade some recall for lower search cost and require tuning against representative data. Pinecone and Qdrant provide vector-search services; pgvector adds vector storage and indexing to PostgreSQL. FAISS provides similarity-search algorithms, while persistence lifecycle, authorization, replication, and metadata operations remain application responsibilities. Compare filtering, update/delete visibility, backups, index construction, and operational ownership. Authenticated tenant and document permissions must constrain candidates before they enter reranking, prompts, logs, or caches. A user-proposed search filter cannot broaden the application-enforced scope. Recheck current access where permissions can change, and coordinate document deletion with dependent indexes and caches. [FAISS project](https://github.com/facebookresearch/faiss), [Qdrant filtering documentation](https://qdrant.tech/documentation/search/filtering/).
+
+**Production example**
+
+ShopStream indexes return-policy chunks with tenant, document version, language, and access metadata. Two merchants can have nearly identical policies without sharing documents. The query service derives permission scope from the signed-in identity, retrieves only permitted candidates, and verifies access before using evidence. Deleting a policy also removes its active vectors and invalidates answers that depended on that version.
+
+**Failure to handle**
+
+The service retrieves across all tenants and asks the model to ignore forbidden passages. Private material has already crossed the boundary. Enforce scope before retrieval results reach downstream stages, then audit traces for any unauthorized candidates.
+
+**Try it**
+
+Index similar policies for two tenants and compare approximate results against exact search. Test selective filters, deletion, and revoked access. Inspect retrieval traces, reranker inputs, and caches; the observable requirement is zero unauthorized passages in every stage, not merely no visible leak.
+
+---
+
+<a id="topic-70"></a>
+## 70. Embedding models
+
+**Simple explanation**
+
+An embedding model converts text into a vector: a list of numbers designed to capture useful relationships. Similar questions and passages can land near each other, making semantic search possible. The numbers are meaningful within that model's embedding space. Vectors from unrelated models are not interchangeable, even if their lists have the same length.
+
+**Production explanation**
+
+Select an embedding model using labeled retrieval questions from the actual domain and languages. Check input limits, preprocessing, normalization, licensing, dimension, latency, and deployment cost. Follow the model's recommended comparison method: cosine similarity, dot product, and Euclidean distance have different assumptions. Some models expect different query and document prefixes or processing. Record these settings and the model revision with each index. Similarity scores are ranking signals, not calibrated probabilities that a passage is correct or relevant; thresholds need task-specific evaluation. More dimensions do not automatically improve accuracy. Changing models normally requires re-embedding the documents into a separately versioned index, with query routing switched consistently. Sentence-BERT demonstrates independently computed sentence representations for efficient similarity comparison. [Sentence-BERT paper](https://arxiv.org/abs/1908.10084).
+
+**Production example**
+
+ShopStream buyers ask “Can I get my money back?” while documents say “refund eligibility.” Embeddings connect these phrases, but exact SKU codes still benefit from lexical matching. During an embedding migration, a new index is built and evaluated before traffic switches. Keeping the old index temporarily allows rollback without mixing incompatible document and query vectors.
+
+**Failure to handle**
+
+A deployment changes the query encoder while leaving old document vectors active. Search returns plausible but irrelevant neighbors. Reject incompatible index/model versions explicitly, and switch or roll back the encoder and index as one compatible pair.
+
+**Try it**
+
+Label relevant passages for multilingual questions, paraphrases, and SKU queries. Compare two embedding models using recall at a fixed depth, latency, and storage. Record full configuration and verify mismatched query/index versions fail rather than quietly returning poor results.
+
+---
+
+<a id="topic-71"></a>
+## 71. Chunking strategies
+
+**Simple explanation**
+
+Chunking cuts a document into pieces that search can retrieve. Small pieces are focused but may lose important context. Large pieces preserve context but use more space in the model's prompt. The useful unit is often a complete rule with its exception, rather than an arbitrary number of characters or the nearest page boundary.
+
+**Production explanation**
+
+Fixed token windows are predictable and inexpensive. Sentence-aware and heading-aware methods preserve structure; semantic splitting may require additional model computation. Evaluate the trade-off between retrieval specificity, surrounding context, duplicate overlap, index size, and generation tokens. Tables, code, forms, and scanned documents often need specialized extraction. Preserve headings, source locations, parent-section identifiers, document versions, and inherited permissions on every chunk. An exception should remain with its rule or be recoverable through an authorized parent section. Overlap can protect boundaries but does not guarantee completeness. Choose sizes using answer and retrieval evaluation on representative documents, rather than a universal “best” chunk length. LlamaIndex's sentence splitter illustrates sentence-aware splitting with configured limits and overlap. [Sentence splitter reference](https://developers.llamaindex.ai/python/framework-api-reference/node_parsers/sentence_splitter/).
+
+**Production example**
+
+ShopStream's policy permits returns within 30 days, then excludes personalized items. A fixed boundary that separates those statements gives the assistant incomplete evidence. Section-aware ingestion keeps the rule and exception together, attaches page and version metadata, and preserves the merchant's access scope. A citation then lets the customer inspect the complete clause instead of an isolated sentence.
+
+**Failure to handle**
+
+OCR flattens a policy table and separates column headings from values. Mark extraction quality, preserve table structure where possible, and route uncertain answers for review instead of treating every parsed chunk as equally reliable evidence.
+
+**Try it**
+
+Compare fixed windows, sentence splits, and section splits on the same policies. Include table and boundary-spanning questions. Measure missing evidence, duplicate passages, context tokens, and answer correctness; verify every result resolves to an authorized source with the required exception intact.
+
+---
+
+<a id="topic-72"></a>
+## 72. Hybrid search
+
+**Simple explanation**
+
+Lexical search is good at finding exact words and identifiers. Vector search is good at finding related meanings. Hybrid search combines both so a question containing a SKU and a paraphrased policy term can work. A reranker then examines a smaller candidate list more carefully to decide which passages deserve the limited space in the prompt.
+
+**Production explanation**
+
+BM25 is a lexical ranking method using term matches, frequency, and document length. Dense retrieval ranks vector similarity. Run both within the same enforced access scope, then combine and deduplicate candidates. Their raw scores are not directly comparable, and neither represents the probability of a correct answer. Reciprocal rank fusion (RRF) combines positions in ranked lists instead of treating unrelated scores as equivalent. A reranker jointly evaluates the query and each candidate, usually at higher cost than independently computed embeddings. Limit candidate depth, reranker batch size, and deadlines. If a branch fails, use a documented degraded path or abstain rather than silently changing quality expectations. Evaluate identifiers, paraphrases, misspellings, and permission filters separately. [Elasticsearch RRF documentation](https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion).
+
+```mermaid
+flowchart LR
+    A[Query and enforced scope] --> B[Lexical search]
+    A --> C[Vector search]
+    B --> D[Fuse and deduplicate]
+    C --> D
+    D --> E[Bounded reranking]
+    E --> F[Authorized evidence]
+```
+
+*Both search branches receive the same permission scope. Their candidate lists join before the more expensive reranking stage.*
+
+**Production example**
+
+“Refund for SKU AB-104” combines an exact product identifier with a semantic intent. ShopStream's lexical branch locates that SKU; its vector branch finds passages phrased as “reimbursement eligibility.” Fusion and reranking select the relevant authorized policy. The system records which branches contributed evidence so an evaluation can reveal when one search method consistently misses a category of question.
+
+**Failure to handle**
+
+A large candidate list overwhelms the reranker and creates a latency spike. Cap candidate counts, propagate deadlines, and measure ranking quality at smaller depths. Scale or retain the stage only when its quality gain justifies its cost.
+
+**Try it**
+
+Compare lexical-only, vector-only, and hybrid search with identical documents and permissions. Record recall, ranking quality, p95 latency, and reranking cost. Include exact identifiers and paraphrases; keep the extra stage only if the measured improvement survives the harder cases.
+
+---
+
+<a id="topic-73"></a>
+## 73. RAG evaluation
+
+**Simple explanation**
+
+Evaluate two questions separately: did search find the right evidence, and did the assistant use it correctly? An answer can sound helpful while citing the wrong rule. It can also accurately repeat an outdated policy. Good evaluation therefore checks the sources, the answer, and whether the system correctly says it lacks enough information.
+
+**Production explanation**
+
+Retrieval recall measures whether required evidence was found; precision measures how much retrieved content was useful. Faithfulness checks whether answer claims are supported by supplied context. Answer relevance checks whether the response addresses the question. Also assess correctness, source currency, valid citations, authorization, and appropriate abstention. A faithful answer based on an obsolete policy can still be wrong. RAGAS supplies automated metrics, including faithfulness, but model judges can make errors and share biases with the generator. Calibrate them against human-reviewed cases and inspect disagreements. Version the evaluation set and separate retrieval changes from generation changes where possible. Track quality alongside latency and cost during a limited rollout; ratings alone cannot prove correct business outcomes. [RAGAS faithfulness documentation](https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/faithfulness/).
+
+**Production example**
+
+ShopStream builds a reviewed set of ordinary questions, exceptions, missing answers, multilingual requests, and malicious documents. Required source versions and expected claims accompany each case. After a chunking update, retrieval recall improves but answers miss more exceptions. Stage-level evaluation reveals the regression, allowing the team to fix context assembly before sending the update to all customers.
+
+**Failure to handle**
+
+An automated judge rewards a polished answer that cites a related but non-supporting paragraph. Sample judgments for human review, verify claim-to-source support, and include known incorrect answers to test whether the evaluator detects the failure.
+
+**Try it**
+
+Create a small reviewed dataset with expected claims, required sources, and no-answer cases. Compare a baseline and one retrieval change. Classify failures by search, extraction, context, or generation, and verify citations support the particular claim rather than merely a similar topic.
+
+---
+
+<a id="topic-74"></a>
+## 74. Advanced RAG patterns
+
+**Simple explanation**
+
+Advanced RAG changes how the system searches or expands evidence. HyDE creates a hypothetical answer to help find real documents. Self-query turns a question into search terms and metadata filters. Parent-child retrieval searches small passages, then adds the surrounding section. Each can help a particular problem, but more steps also mean more delay and more ways to fail.
+
+**Production explanation**
+
+HyDE embeds a generated hypothetical document to improve retrieval; that generated text is a search aid, never authoritative evidence. Self-query produces semantic queries and structured constraints such as language or date. Validate those constraints against an allowed schema, and combine them with mandatory tenant and permission filters supplied by the application. Parent-child retrieval uses focused child chunks for matching and larger parent sections for context. Parent fetches must recheck current authorization and consistent document versions before entering the prompt. Keep context and latency budgets explicit because expansion can multiply tokens. Add one pattern at a time to a measured baseline, including ordinary and difficult questions; remove it if improved recall does not produce better overall outcomes. [HyDE research paper](https://arxiv.org/abs/2212.10496).
+
+```mermaid
+flowchart LR
+    A[Question and access scope] --> B[Search child chunks]
+    B --> C[Select matching child]
+    C --> D[Check parent access and version]
+    D --> E[Fetch complete section]
+    E --> F[Assemble bounded evidence]
+```
+
+*The child locates relevant material. The parent supplies context only after its own access and version checks succeed.*
+
+**Production example**
+
+A ShopStream merchant asks what changed in the return policy this year. A validated date constraint narrows search, child chunks locate revisions, and parent sections include the complete conditions. If HyDE imagines a policy that never existed, the assistant cannot cite it. Only approved retrieved documents support the answer, and missing historical versions produce an explicit information gap.
+
+**Failure to handle**
+
+A model-generated filter requests another tenant, or a permitted child expands into a forbidden parent. Reject invalid filters, retain mandatory application scope, and repeat authorization on expansion. Treat a blocked parent as unavailable evidence rather than a bypass opportunity.
+
+**Try it**
+
+Enable one advanced pattern on an evaluated hybrid baseline. Test malformed filters, changed permissions, nonexistent policies, and oversized parents. Compare answer correctness, latency, and tokens; require a measurable benefit without unauthorized expansion or regressions on ordinary questions.
+
+---
+
+**Check your understanding**
+
+- Can you explain why fitting model weights into memory does not establish serving capacity?
+- Can you trace one authorized passage through extraction, embedding, search, and citation?
+- Can you distinguish similarity, faithfulness, and factual correctness?
+- Can your assistant acknowledge missing evidence and handle an exception that crosses a chunk boundary?
+
+[← Cloud and infrastructure](04-cloud-and-infrastructure.md) · [Roadmap](../roadmap.md) · [Glossary](../glossary.md) · [Next: Agents and production →](06-agents-and-ai-production.md)

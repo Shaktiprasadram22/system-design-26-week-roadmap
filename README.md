@@ -1,73 +1,60 @@
-# System Design: 26-Week Roadmap
+![System design: understand the fundamentals, connect the components, and handle production failures.](assets/reading-cover.svg)
 
-**89 topics · 89 production scenarios · 89 practical exercises**
+# System design, step by step
 
-A complete system-design learning guide covering networking, databases, distributed systems, reliability, security, cloud infrastructure, RAG, and AI agents. Every topic includes an explanation, a realistic production scenario, and an exercise with verification criteria.
+**26 weeks · 89 topics · simple explanations + production explanations**
 
-## Start reading on GitHub
+Learn what happens behind a request, how a system grows, and how it stays correct when something fails. This is a reading guide with diagrams, concrete examples, and small exercises.
 
-1. Follow the [26-week roadmap](roadmap.md) for the weekly schedule, project deliverables, and milestones.
-2. Read the phase chapters below, or use the [complete guide](complete-guide.md) for all lessons in one document.
-3. Work through the [checkout and document-Q&A walkthroughs](chapters/07-production-walkthroughs-and-case-studies.md) to connect the concepts.
-4. Track completion and evidence in the [89-topic progress tracker](topic-tracker.csv).
+**[Start with the roadmap →](roadmap.md)** · **[Look up a term](glossary.md)** · **[Read the complete PDF](complete-guide.pdf)**
 
-The Markdown files render directly on GitHub. PDFs are also included for offline reading and printing.
+## Read in order
 
-## Read by phase
+| Weeks | Chapter | What you will understand |
+|---|---|---|
+| 1–4 | [01 · Foundations](chapters/01-foundations.md) | How requests travel, data is stored, and programs use CPU and memory. |
+| 5–10 | [02 · Core system design](chapters/02-core-system-design.md) | How to scale, coordinate copies of data, and process work reliably. |
+| 11–16 | [03 · Reliability, security, and component design](chapters/03-reliability-security-and-lld.md) | How to contain failures, recover, investigate problems, and protect access. |
+| 17–20 | [04 · Cloud and infrastructure](chapters/04-cloud-and-infrastructure.md) | How to run, store, and release systems with clear operational boundaries. |
+| 21–23 | [05 · AI fundamentals and RAG](chapters/05-ai-fundamentals-and-rag.md) | How models generate text and retrieve useful, authorized evidence. |
+| 24–26 | [06 · Agents and AI production systems](chapters/06-agents-and-ai-production.md) | How to control tools, memory, model traffic, quality, and cost. |
+| After the chapters | [07 · Production walkthroughs and case studies](chapters/07-production-walkthroughs-and-case-studies.md) | How the concepts connect in checkout, document Q&A, and documented company systems. |
 
-| Phase | Weeks | Topics | Markdown chapter |
-|---|---|---|---|
-| 1. Foundations | 1–4 | 1–13 | [Networking, APIs, databases, operating systems, and storage](chapters/01-foundations.md) |
-| 2. Core system design | 5–10 | 14–34 | [Scaling, caching, replication, consensus, messaging, and system design](chapters/02-core-system-design.md) |
-| 3. Reliability, security, and LLD | 11–16 | 35–51 | [Resilience, recovery, observability, authorization, and component design](chapters/03-reliability-security-and-lld.md) |
-| 4. Cloud and infrastructure | 17–20 | 52–63 | [Cloud, containers, serverless, storage, and safe delivery](chapters/04-cloud-and-infrastructure.md) |
-| 5. AI fundamentals and RAG | 21–23 | 64–74 | [Transformers, inference, embeddings, retrieval, and evaluation](chapters/05-ai-fundamentals-and-rag.md) |
-| 6. Agents and AI production | 24–26 | 75–89 | [Agents, MCP, memory, guardrails, gateways, and AI system designs](chapters/06-agents-and-ai-production.md) |
+Keep the [glossary](glossary.md) nearby. Chapter contents and previous/next links let you move through the material without guessing where to go.
 
-The [production walkthroughs and case studies](chapters/07-production-walkthroughs-and-case-studies.md) include two connected designs and six documented examples from GitHub, Amazon, Google, Slack, Netflix, and Uber, with primary-source references.
+## How each lesson works
 
-## Download the documents
+**Simple explanation** gives you the idea in familiar words. **Production explanation** covers the mechanism, trade-offs, and guarantees. **Production example** puts it into a realistic system. **Failure to handle** names a specific problem and response. **Try it** gives you a small exercise with an observable result.
 
-- [Complete guide — PDF](complete-guide.pdf)
-- [Weekly roadmap — PDF](roadmap.pdf)
-- [Full reading package — ZIP](system-design-learning-package.zip)
-- [Complete guide — editable Markdown](complete-guide.md)
-- [Weekly roadmap — editable Markdown](roadmap.md)
+Read the simple explanation first, follow the diagram where provided, then work through the production details. Move on when you can explain the choice and what happens when it fails.
 
-Browser versions are available as [complete-guide.html](complete-guide.html) and [roadmap.html](roadmap.html). Download and open them locally; reference links require internet access.
+## One example connects the chapters
 
-## Learn through one project
+**ShopStream** is a teaching marketplace. Buyers browse and order products; merchants manage stock; workers send notifications; a support assistant reads policies and authorized order data. A **tenant** is a separate merchant or organization whose private data must stay isolated.
 
-The running project is **ShopStream**, an illustrative multi-tenant marketplace with a product catalogue, inventory, checkout, payments, notifications, chat, and support document search. It connects the lessons through practical requirements:
-
-- Inventory never becomes negative.
-- Repeated requests do not create duplicate effective charges.
-- One tenant cannot access another tenant's private data.
-- Accepted durable operations remain recoverable.
-- AI answers use authorized evidence, and tools enforce permissions outside the model.
-
-Use one backend language you already know. Start with a small application and add infrastructure when a measured problem or required failure behavior justifies it. All proposed architectures and numerical lab targets are teaching assumptions; company case studies describe the systems documented at publication time.
-
-## Suggested pace
-
-Budget **7–8 hours per week** for a focused first pass, extending weeks for deeper implementations. The first ten weeks cover the core track; later phases deepen reliability, cloud, and AI skills. Week 26 implements one AI capstone and reviews the other four designs.
-
-Complete a topic when you can explain its trade-offs and demonstrate its behavior, including at least one relevant failure case. Keep diagrams, measurements, decision notes, and recovery evidence alongside your progress tracker.
-
-## Rebuild the PDF and HTML files
-
-The [phase chapters](chapters/) and [roadmap.md](roadmap.md) are the source documents. The build combines them into the complete guide and exports both documents to PDF and HTML.
-
-```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/python build_documents.py
+```mermaid
+flowchart TD
+    Buyer["Buyer"] --> API["Catalogue and checkout"]
+    API --> DB["Orders and inventory"]
+    API --> Cache["Reusable catalogue reads"]
+    DB --> Jobs["Durable notification jobs"]
+    Buyer --> Support["Support assistant"]
+    Support --> Evidence["Authorized policies and order facts"]
 ```
 
-WeasyPrint requires its platform dependencies; see the [official installation instructions](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#installation). The PDF styles use DejaVu fonts. Rebuilding preserves an existing progress tracker.
+The arrows show where requests and data go. The database owns business facts; cached descriptions and AI answers use those facts under their own freshness and permission rules.
 
-## Curriculum attribution
+The examples keep four requirements visible: stock stays nonnegative, retries preserve one effective charge, tenants remain isolated, and accepted durable work can be recovered. Exercise numbers are teaching assumptions to measure. Company case studies cite actual published engineering accounts.
 
-Based on the [original implementation curriculum](https://system-design-24-week.vercel.app/), inspected on **1 October 2026**, and its linked [mental-model curriculum](https://system-design-12-week.vercel.app/). Despite the source URL saying “24-week,” the actual plan contains **26 weeks and 89 topics**.
+## Read offline
 
-The explanations, scenarios, exercises, weekly assignments, walkthroughs, and production corrections expand the source checklist. [curriculum.json](curriculum.json) preserves the structured source-topic mapping. Primary references appear beside the relevant lessons and case studies.
+- [Complete reading guide — PDF](complete-guide.pdf)
+- [26-week roadmap — PDF](roadmap.pdf)
+
+## Pace and background
+
+Start with basic programming, Git, and SQL. Use a backend language you already know. **7–8 hours per week** supports reading and small experiments; deeper implementations can extend the schedule. In week 26, implement one AI design and review the other four on paper.
+
+## Sources
+
+This guide expands the [implementation curriculum](https://system-design-24-week.vercel.app/) inspected on 1 October 2026, with its [mental-model companion](https://system-design-12-week.vercel.app/). The source URL contains “24-week,” but the actual curriculum has 26 weeks and 89 topics. Technical references appear beside the relevant explanations; company case studies describe systems at their publication time.

@@ -1,8 +1,21 @@
-# System design: a 26-week production learning roadmap
+# The 26-week reading roadmap
 
-Based on the curriculum at [system-design-24-week.vercel.app](https://system-design-24-week.vercel.app/), inspected on 1 October 2026.
+[Home](README.md) · [Glossary](glossary.md) · [Start chapter 1 →](chapters/01-foundations.md)
 
-The website's URL says 24 weeks, but its actual curriculum is **26 weeks, six phases, and 89 topics**. It assigns weeks to phases rather than individual lessons. The week-by-week assignments, project, acceptance criteria, and expanded explanations below are my proposed learning plan. The source calls the first 10 weeks core and the remaining phases optional by need; this plan covers all six because you asked for every topic.
+**Read an idea. Follow its data flow. Explain the production trade-off. Demonstrate one failure.**
+
+This schedule covers all 89 lessons once. It assigns topics to individual weeks; the original curriculum assigned weeks only to phases. Use the numbered chapter contents to find each lesson.
+
+```mermaid
+flowchart TD
+    F["Weeks 1 to 4: understand a request"] --> D["Weeks 5 to 10: distribute the work"]
+    D --> R["Weeks 11 to 16: stay correct through failures"]
+    R --> C["Weeks 17 to 20: run and release the system"]
+    C --> K["Weeks 21 to 23: retrieve evidence for AI"]
+    K --> A["Weeks 24 to 26: control AI actions and quality"]
+```
+
+Each stage builds on the previous one. Study later topics early when your project needs them, while keeping the correctness and access rules of your system explicit.
 
 ## What you will learn
 
@@ -10,12 +23,12 @@ System design means deciding how components cooperate to meet a product's requir
 
 | Phase | Weeks | Topics | Learning outcome |
 |---|---:|---:|---|
-| Foundations | 1–4 | 1–13 | Explain a request from network to durable storage. |
-| Core system design | 5–10 | 14–34 | Scale reads and asynchronous work while preserving business correctness. |
-| Reliability, security, and component design | 11–16 | 35–51 | Diagnose failures, recover data, protect tenants, and implement maintainable components. |
-| Cloud and infrastructure | 17–20 | 52–63 | Package, provision, release, and operate an application and its data pipelines. |
-| AI fundamentals and RAG | 21–23 | 64–74 | Build permission-aware retrieval and measure answer quality, latency, and cost. |
-| Agents and AI production systems | 24–26 | 75–89 | Control tool execution and design evaluated AI products. |
+| [Foundations](chapters/01-foundations.md) | 1–4 | 1–13 | Explain a request from network to durable storage. |
+| [Core system design](chapters/02-core-system-design.md) | 5–10 | 14–34 | Scale reads and asynchronous work while preserving business correctness. |
+| [Reliability, security, and component design](chapters/03-reliability-security-and-lld.md) | 11–16 | 35–51 | Diagnose failures, recover data, protect tenants, and implement maintainable components. |
+| [Cloud and infrastructure](chapters/04-cloud-and-infrastructure.md) | 17–20 | 52–63 | Package, provision, release, and operate an application and its data pipelines. |
+| [AI fundamentals and RAG](chapters/05-ai-fundamentals-and-rag.md) | 21–23 | 64–74 | Build permission-aware retrieval and measure answer quality, latency, and cost. |
+| [Agents and AI production systems](chapters/06-agents-and-ai-production.md) | 24–26 | 75–89 | Control tool execution and design evaluated AI products. |
 
 This is a guided foundation and portfolio plan. The site's 7–8 hours per week is suitable for a focused first pass with small prototypes. Doing every lab deeply may require extra time or repeating weeks. In the final week, implement one AI capstone and write design reviews for the other four rather than trying to ship five complete products.
 
@@ -37,7 +50,7 @@ Maintain four invariants throughout: stock never becomes negative; retries do no
 
 ## The weekly schedule
 
-Topic numbers refer to the full companion guide. Completion evidence should include a diagram or sequence, a working small example, observed behavior under failure, and a short trade-off note. Numerical targets below are teaching targets to test locally, not claims about production capacity.
+Topic numbers refer to the linked phase chapters. Completion evidence should include a diagram or sequence, a working small example, observed behavior under failure, and a short trade-off note. Numerical targets below are teaching targets to test locally, not claims about production capacity.
 
 | Week | Study | Deliverable and completion evidence |
 |---:|---|---|
@@ -91,3 +104,5 @@ For each topic, answer five questions: what problem does it solve; what happens 
 Keep an architecture diagram; API and data contracts; a capacity worksheet; failure assumptions; consistency choices; an SLI/SLO definition; a security and tenant-isolation design; a recovery runbook; a release/rollback procedure; and, for AI, versioned datasets and evaluation results. Include one short decision record for each major technology explaining the measured problem, alternatives, trade-off, and reason to revisit the choice.
 
 Start with week 1 and the baseline API. Add infrastructure as the measured workload and required failure behavior justify it.
+
+[Home](README.md) · [Glossary](glossary.md) · [Start chapter 1 →](chapters/01-foundations.md)

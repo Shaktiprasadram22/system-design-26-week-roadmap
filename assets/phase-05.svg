@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="240" viewBox="0 0 1120 240" role="img" aria-labelledby="title desc">
+<title id="title">AI fundamentals and RAG</title>
+<desc id="desc">Weeks 21–23 · 11 topics. Retrieve useful evidence and evaluate the answers.</desc>
+<g font-family="DejaVu Sans, Arial, sans-serif">
+<rect width="1120" height="240" rx="18" fill="#fdf2f8"/>
+<path d="M18 0H1102Q1120 0 1120 18V8H0V18Q0 0 18 0Z" fill="#be185d"/>
+<circle cx="1067" cy="95" r="133" fill="#be185d" opacity="0.055"/>
+<circle cx="1019" cy="122" r="82" fill="none" stroke="#be185d" stroke-width="2" opacity="0.15"/>
+<path d="M888 175L955 109L1020 145L1080 80" fill="none" stroke="#be185d" stroke-width="3" opacity="0.25"/>
+<circle cx="888" cy="175" r="8" fill="#be185d" opacity="0.5"/>
+<circle cx="955" cy="109" r="12" fill="#be185d" opacity="0.5"/>
+<circle cx="1080" cy="80" r="8" fill="#be185d" opacity="0.5"/>
+<circle cx="1020" cy="145" r="31" fill="#be185d"/>
+<text x="1020" y="155" fill="#ffffff" font-size="26" font-weight="700" text-anchor="middle">05</text>
+<rect x="40" y="28" width="124" height="32" rx="16" fill="#be185d"/>
+<text x="102.0" y="49" fill="#ffffff" font-size="14" font-weight="700" text-anchor="middle" letter-spacing="0.8">PHASE 05</text>
+<text x="184" y="49" fill="#334155" font-size="18" font-weight="400" text-anchor="start">Weeks 21–23 · 11 topics</text>
+<text x="40" y="119" fill="#132c42" font-size="40" font-weight="700" text-anchor="start">AI fundamentals and RAG</text>
+<text x="40" y="159" fill="#334155" font-size="20" font-weight="400" text-anchor="start">Retrieve useful evidence and evaluate the answers.</text>
+<text x="40" y="197" fill="#be185d" font-size="16" font-weight="500" text-anchor="start">Simple explanation  /  Production detail  /  Real examples</text>
+<rect x="40" y="218" width="24" height="5" rx="2.5" fill="#2563eb"/>
+<rect x="72" y="218" width="24" height="5" rx="2.5" fill="#7c3aed"/>
+<rect x="104" y="218" width="24" height="5" rx="2.5" fill="#0f766e"/>
+<rect x="136" y="218" width="24" height="5" rx="2.5" fill="#c2410c"/>
+<rect x="168" y="218" width="24" height="5" rx="2.5" fill="#be185d"/>
+<rect x="200" y="218" width="24" height="5" rx="2.5" fill="#4338ca"/>
+</g>
+</svg>

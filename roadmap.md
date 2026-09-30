@@ -1,8 +1,11 @@
+![The 26-week roadmap: six phases from foundations to production AI.](assets/roadmap.svg)
+
 # The 26-week reading roadmap
 
 [Home](README.md) · [Glossary](glossary.md) · [Start chapter 1 →](chapters/01-foundations.md)
 
-**Read an idea. Follow its data flow. Explain the production trade-off. Demonstrate one failure.**
+> [!TIP]
+> **Read an idea. Follow its data flow. Explain the production trade-off. Demonstrate one failure.**
 
 This schedule covers all 89 lessons once. It assigns topics to individual weeks; the original curriculum assigned weeks only to phases. Use the numbered chapter contents to find each lesson.
 
@@ -13,6 +16,18 @@ flowchart TD
     R --> C["Weeks 17 to 20: run and release the system"]
     C --> K["Weeks 21 to 23: retrieve evidence for AI"]
     K --> A["Weeks 24 to 26: control AI actions and quality"]
+    classDef foundation fill:#dbeafe,stroke:#2563eb,color:#172554,stroke-width:2px;
+    classDef core fill:#ede9fe,stroke:#7c3aed,color:#3b0764,stroke-width:2px;
+    classDef reliability fill:#ccfbf1,stroke:#0f766e,color:#134e4a,stroke-width:2px;
+    classDef cloud fill:#ffedd5,stroke:#c2410c,color:#431407,stroke-width:2px;
+    classDef retrieval fill:#fce7f3,stroke:#be185d,color:#500724,stroke-width:2px;
+    classDef agents fill:#e0e7ff,stroke:#4338ca,color:#1e1b4b,stroke-width:2px;
+    class F foundation;
+    class D core;
+    class R reliability;
+    class C cloud;
+    class K retrieval;
+    class A agents;
 ```
 
 Each stage builds on the previous one. Study later topics early when your project needs them, while keeping the correctness and access rules of your system explicit.
@@ -52,31 +67,70 @@ Maintain four invariants throughout: stock never becomes negative; retries do no
 
 Topic numbers refer to the linked phase chapters. Completion evidence should include a diagram or sequence, a working small example, observed behavior under failure, and a short trade-off note. Numerical targets below are teaching targets to test locally, not claims about production capacity.
 
+### Weeks 1–4 · Foundations
+
+**Phase 1** · [Read this chapter →](chapters/01-foundations.md)
+
 | Week | Study | Deliverable and completion evidence |
 |---:|---|---|
 | 1 | Networking; HTTP versions; DNS/CDN; WebSockets/SSE; API styles. Topics 1–5. | Trace a request from DNS through TLS to an API. Implement a resource endpoint and resumable order-status stream. Explain why REST, GraphQL, or gRPC suits its client. |
 | 2 | SQL, transactions, normalization, indexes. Topics 6, 9–10. | Create orders and inventory with constraints. Race requests for the last item; confirm one reservation. Compare a slow query's plan before and after indexing. |
 | 3 | NoSQL and CAP. Topics 7–8. | Model catalogue and activity access patterns. Design behavior during a two-region partition; state which operations become unavailable or stale and why. |
 | 4 | Processes, threads, memory, I/O, storage. Topics 11–13. | Move CPU-heavy work off request handling. Stream a large upload with bounded memory and demonstrate persistence after restart. |
+
+### Weeks 5–10 · Core system design
+
+**Phase 2** · [Read this chapter →](chapters/02-core-system-design.md)
+
+| Week | Study | Deliverable and completion evidence |
+|---:|---|---|
 | 5 | Scaling, load balancing, cache, CDN. Topics 14–17. | Run two API instances, cache catalogue reads, version image URLs, and measure p95 latency. Kill an instance and flush the cache during load. |
 | 6 | Shards, replicas, consistent hashing, replication. Topics 18–21. | Demonstrate lag and read-after-write behavior. Compare key movement when adding a node. Design hot-tenant handling and a shard migration sequence. |
 | 7 | Consensus, distributed transactions, clocks. Topics 22–24. | Simulate a majority election and minority partition. Build a recoverable checkout saga and crash between steps. Explain causal versus timestamp order. |
 | 8 | Queues, events, idempotency, stream processing. Topics 25–28. | Commit an order and outbox row atomically. Redeliver events without duplicate business effects. Produce a time-windowed sales aggregate with a late-event policy. |
 | 9 | Estimation, components, microservices, URL shortener. Topics 29–32. | Write a capacity worksheet and component sequence. Build a short-link service with collision handling, expiry, caching, and a hot-link load test. |
 | 10 | Feed and messaging design. Topics 33–34. | Prototype chronological fan-out and reconnectable chat. Verify deletion/visibility rules, offline message recovery, and meaningful delivery states. |
+
+### Weeks 11–16 · Reliability, security, and component design
+
+**Phase 3** · [Read this chapter →](chapters/03-reliability-security-and-lld.md)
+
+| Week | Study | Deliverable and completion evidence |
+|---:|---|---|
 | 11 | Circuit breakers, bulkheads, retries, service objectives. Topics 35–37. | Slow a payment stub without exhausting all request capacity. Set deadlines and retry budgets. Define a success SLI and error budget. |
 | 12 | Fault injection and disaster recovery. Topics 38–39. | Run a controlled failure experiment locally. Restore a backup into a clean environment and measure achieved recovery time and possible data loss. |
 | 13 | Traces, metrics, logs, rate limiting. Topics 40–43. | Follow one checkout across components. Build an actionable alert and a tenant-scoped limiter. Diagnose an injected slow query without reading private payloads. |
 | 14 | Authentication, zero trust, API security, encryption. Topics 44–47. | Threat-model checkout and document access. Test token validation, cross-tenant IDs, least privilege, and key/secret rotation. Prove denial at the data/action boundary. |
 | 15 | SOLID and design patterns. Topics 48–49. | Separate checkout policy, payment provider, storage, and clock dependencies. Add an alternative implementation without copying business rules. |
 | 16 | Parking/elevator and limiter/cache component design. Topics 50–51. | Write state machines, invariants, and concurrency behavior. Implement one small component and verify boundary cases and resource limits. |
+
+### Weeks 17–20 · Cloud and infrastructure
+
+**Phase 4** · [Read this chapter →](chapters/04-cloud-and-infrastructure.md)
+
+| Week | Study | Deliverable and completion evidence |
+|---:|---|---|
 | 17 | Cloud foundations, containers, orchestration, serverless. Topics 52–54. | Package the app and document network/storage/IAM boundaries. Compare container and function execution for one real workload. Kubernetes can remain a local learning exercise. |
 | 18 | Infrastructure as Code and service mesh. Topics 55–56. | Recreate an isolated environment from declarative configuration. Review a plan and protect state. Explain what a mesh adds and whether the project needs it. |
 | 19 | Warehouses, lakes, objects, time-series storage. Topics 57–60. | Export orders into a separate analytical dataset. Compare row/column/object/time-series access patterns and validate event timestamps and retention. |
 | 20 | CI/CD, safe deployment, feature flags. Topics 61–63. | Build one immutable artifact, run useful checks, and rehearse a canary with rollback. Add a flag and perform an expand/backfill/contract schema change. |
+
+### Weeks 21–23 · AI fundamentals and RAG
+
+**Phase 5** · [Read this chapter →](chapters/05-ai-fundamentals-and-rag.md)
+
+| Week | Study | Deliverable and completion evidence |
+|---:|---|---|
 | 21 | Transformers, inference, context/KV cache, serving, prompts. Topics 64–68. | Trace a model request, separate time-to-first-token from generation time, and compare prompt lengths and concurrency. Evaluate a structured-output task on fixed examples. |
 | 22 | Vector search, embeddings, chunking, hybrid retrieval. Topics 69–72. | Ingest a small policy collection with tenant/version metadata. Compare chunking and lexical/vector search using labeled questions; reject unauthorized documents before context assembly. |
 | 23 | RAG evaluation and advanced retrieval. Topics 73–74. | Create a held-out question set with answerable, unanswerable, stale, and permission-denied cases. Measure retrieval recall, supported claims, usefulness, latency, and cost. |
+
+### Weeks 24–26 · Agents and AI production systems
+
+**Phase 6** · [Read this chapter →](chapters/06-agents-and-ai-production.md)
+
+| Week | Study | Deliverable and completion evidence |
+|---:|---|---|
 | 24 | Agents, frameworks, multiple agents, MCP, memory. Topics 75–79. | Build a bounded read-only support agent with one typed tool. Enforce identity and budgets outside the model. Compare a deterministic workflow with an agent loop. |
 | 25 | Fine-tuning/RAG choice, gateway, guardrails, observability, cost. Topics 80–84. | Add quotas, capability-aware fallback, redaction, prompt/model versions, and cost per successful task. Test prompt injection and interrupted streams. Justify any training requirement. |
 | 26 | Chatbot, recommendations, code assistant, document Q&A, ML platform. Topics 85–89. | Implement one capstone—document Q&A naturally extends this project. Write a one-page architecture and evaluation plan for each other design. Demonstrate isolation, recovery, and measurable quality. |

@@ -12,21 +12,28 @@ Learn what happens behind a request, how a system grows, and how it stays correc
 
 | Weeks | Chapter | What you will understand |
 |---|---|---|
-| 1–4 | [01 · Foundations](chapters/01-foundations.md) | How requests travel, data is stored, and programs use CPU and memory. |
-| 5–10 | [02 · Core system design](chapters/02-core-system-design.md) | How to scale, coordinate copies of data, and process work reliably. |
-| 11–16 | [03 · Reliability, security, and component design](chapters/03-reliability-security-and-lld.md) | How to contain failures, recover, investigate problems, and protect access. |
-| 17–20 | [04 · Cloud and infrastructure](chapters/04-cloud-and-infrastructure.md) | How to run, store, and release systems with clear operational boundaries. |
-| 21–23 | [05 · AI fundamentals and RAG](chapters/05-ai-fundamentals-and-rag.md) | How models generate text and retrieve useful, authorized evidence. |
-| 24–26 | [06 · Agents and AI production systems](chapters/06-agents-and-ai-production.md) | How to control tools, memory, model traffic, quality, and cost. |
-| After the chapters | [07 · Production walkthroughs and case studies](chapters/07-production-walkthroughs-and-case-studies.md) | How the concepts connect in checkout, document Q&A, and documented company systems. |
+| 1–4 | 🟦 [01 · Foundations](chapters/01-foundations.md) | How requests travel, data is stored, and programs use CPU and memory. |
+| 5–10 | 🟪 [02 · Core system design](chapters/02-core-system-design.md) | How to scale, coordinate copies of data, and process work reliably. |
+| 11–16 | 🟩 [03 · Reliability, security, and component design](chapters/03-reliability-security-and-lld.md) | How to contain failures, recover, investigate problems, and protect access. |
+| 17–20 | 🟧 [04 · Cloud and infrastructure](chapters/04-cloud-and-infrastructure.md) | How to run, store, and release systems with clear operational boundaries. |
+| 21–23 | 🟥 [05 · AI fundamentals and RAG](chapters/05-ai-fundamentals-and-rag.md) | How models generate text and retrieve useful, authorized evidence. |
+| 24–26 | 🔷 [06 · Agents and AI production systems](chapters/06-agents-and-ai-production.md) | How to control tools, memory, model traffic, quality, and cost. |
+| After the chapters | 🟩 [07 · Production walkthroughs and case studies](chapters/07-production-walkthroughs-and-case-studies.md) | How the concepts connect in checkout, document Q&A, and documented company systems. |
 
 Keep the [glossary](glossary.md) nearby. Chapter contents and previous/next links let you move through the material without guessing where to go.
 
 ## How each lesson works
 
-**Simple explanation** gives you the idea in familiar words. **Production explanation** covers the mechanism, trade-offs, and guarantees. **Production example** puts it into a realistic system. **Failure to handle** names a specific problem and response. **Try it** gives you a small exercise with an observable result.
+| Lesson section | What to look for |
+|---|---|
+| 🟦 **Simple explanation** | The idea in familiar words, before the technical details. |
+| 🟪 **Production explanation** | The mechanism, trade-offs, and guarantees. |
+| 🟩 **Production example** | A realistic request or data flow in ShopStream. |
+| 🟧 **Failure to handle** | A specific failure and the response that protects users. |
+| 🛠️ **Try it** | A small exercise with an observable result. |
 
-Read the simple explanation first, follow the diagram where provided, then work through the production details. Move on when you can explain the choice and what happens when it fails.
+> [!TIP]
+> Read the simple explanation first, follow the diagram where provided, then work through the production details. Move on when you can explain the choice and what happens when it fails.
 
 ## One example connects the chapters
 
@@ -40,6 +47,14 @@ flowchart TD
     DB --> Jobs["Durable notification jobs"]
     Buyer --> Support["Support assistant"]
     Support --> Evidence["Authorized policies and order facts"]
+    classDef input fill:#dbeafe,stroke:#2563eb,color:#172554,stroke-width:2px;
+    classDef service fill:#ede9fe,stroke:#7c3aed,color:#3b0764,stroke-width:2px;
+    classDef data fill:#ccfbf1,stroke:#0f766e,color:#134e4a,stroke-width:2px;
+    classDef edge fill:#ffedd5,stroke:#c2410c,color:#431407,stroke-width:2px;
+    class Buyer input;
+    class API,Support service;
+    class DB,Cache,Evidence data;
+    class Jobs edge;
 ```
 
 The arrows show where requests and data go. The database owns business facts; cached descriptions and AI answers use those facts under their own freshness and permission rules.

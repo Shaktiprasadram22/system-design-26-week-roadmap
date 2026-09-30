@@ -1,3 +1,5 @@
+![Production walkthroughs and case studies — system design reading guide](../assets/walkthroughs.svg)
+
 # Production walkthroughs and case studies
 
 [Home](../README.md) · [Roadmap](../roadmap.md) · [Glossary](../glossary.md) · [← AI production systems](06-agents-and-ai-production.md)
@@ -16,11 +18,12 @@ Read these after the phase chapters, or return to them whenever a concept feels 
 <a id="checkout"></a>
 ## Checkout: one order through retries and failures
 
-**Simple explanation**
+> [!NOTE]
+> **Simple explanation**
+>
+> A checkout is a promise about stock and money. Clicking twice or losing a connection should not buy the same item twice. Save one logical order, reserve its stock safely, and use the same payment identity while discovering the payment outcome. Send receipts in the background.
 
-A checkout is a promise about stock and money. Clicking twice or losing a connection should not buy the same item twice. Save one logical order, reserve its stock safely, and use the same payment identity while discovering the payment outcome. Send receipts in the background.
-
-**Production explanation**
+### 🟣 Production explanation
 
 Networking, storage, workflows, messaging, and recovery cooperate across several boundaries. A local transaction preserves local order/inventory state; the payment provider has a separate contract; durable workflow state reconciles uncertain outcomes. The numerical workload below is a teaching assumption. The business invariants must hold through the specified failures.
 
@@ -47,6 +50,14 @@ flowchart TD
     DB --> Relay["Outbox relay"]
     Relay --> Queue["Durable event broker"]
     Queue --> Worker["Payment and event consumers"]
+
+    classDef input fill:#dbeafe,stroke:#2563eb,color:#172554;
+    classDef service fill:#ede9fe,stroke:#7c3aed,color:#3b0764;
+    classDef data fill:#ccfbf1,stroke:#0f766e,color:#134e4a;
+    classDef edge fill:#ffedd5,stroke:#c2410c,color:#431407;
+    class Client input;
+    class API,Relay,Worker service;
+    class DB,Cache,Objects,Queue data;
 ```
 
 The initial transaction records the pending order and a PaymentRequested outbox event. Its consumer starts payment processing. Later, payment confirmation and a PaymentConfirmed outbox event commit together; only confirmed-payment events authorize paid receipts and fulfillment. Publication and delivery can repeat at either stage.
@@ -131,11 +142,12 @@ Keep the measured timeline and result of each test. The application being reacha
 <a id="document-qa"></a>
 ## Document Q&A: evidence with permission checks
 
-**Simple explanation**
+> [!NOTE]
+> **Simple explanation**
+>
+> Think of this as an assistant consulting the right handbook. It first checks which documents you may read, finds the relevant passages, and answers with references. Current order facts come from an authorized application tool. Missing evidence should produce an honest no-answer result.
 
-Think of this as an assistant consulting the right handbook. It first checks which documents you may read, finds the relevant passages, and answers with references. Current order facts come from an authorized application tool. Missing evidence should produce an honest no-answer result.
-
-**Production explanation**
+### 🟣 Production explanation
 
 The support assistant needs two separate truths: current account facts from authorized application APIs, and applicable policy text from documents. A language model proposes an answer using these inputs; it does not establish order ownership, change stock, or authorize a refund.
 
@@ -156,6 +168,15 @@ flowchart TD
     Auth --> Tool["Authorized order facts"]
     Tool --> Context
     Context --> Answer["Answer with citations or abstain"]
+
+    classDef input fill:#dbeafe,stroke:#2563eb,color:#172554;
+    classDef service fill:#ede9fe,stroke:#7c3aed,color:#3b0764;
+    classDef data fill:#ccfbf1,stroke:#0f766e,color:#134e4a;
+    classDef edge fill:#ffedd5,stroke:#c2410c,color:#431407;
+    class Q input;
+    class Auth edge;
+    class Search,Rank,Tool service;
+    class Context,Answer data;
 ```
 
 Only permitted documents and order facts enter the context. Citations let the reader inspect evidence; they do not replace correctness or freshness checks.

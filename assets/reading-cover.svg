@@ -1,24 +1,61 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="300" viewBox="0 0 1120 300" role="img" aria-labelledby="title description">
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="372" viewBox="0 0 1120 372" role="img" aria-labelledby="title desc">
 <title id="title">System design, step by step</title>
-<desc id="description">A reading guide connecting foundations, distributed systems, reliability, cloud, retrieval, and AI agents.</desc>
-<rect width="1120" height="300" rx="14" fill="#102d3d"/>
+<desc id="desc">A colorful reading guide with 26 weeks, 89 topics, and 36 diagrams. Six phases connect foundations, distributed systems, reliability, cloud, retrieval, and AI agents.</desc>
 <g font-family="DejaVu Sans, Arial, sans-serif">
-<text x="46" y="48" fill="#9dd5ca" font-size="13" font-weight="700" letter-spacing="2">THE PRODUCTION READING GUIDE</text>
-<text x="44" y="115" fill="#f7f3e9" font-size="46" font-weight="700">System design, step by step.</text>
-<text x="46" y="156" fill="#d4dfdf" font-size="19">Understand the idea. Follow the flow. Handle the failure.</text>
-<path d="M61 222 H975" stroke="#54717a" stroke-width="2"/>
-<g fill="#102d3d" stroke="#9dd5ca" stroke-width="2">
-<circle cx="61" cy="222" r="16"/><circle cx="244" cy="222" r="16"/>
-<circle cx="426" cy="222" r="16"/><circle cx="609" cy="222" r="16"/>
-<circle cx="792" cy="222" r="16"/><circle cx="975" cy="222" r="16"/>
+<rect width="1120" height="372" rx="20" fill="#f8fafc"/>
+<path d="M746 0H1100Q1120 0 1120 20V218H746Z" fill="#eef2ff"/>
+<circle cx="1096" cy="-8" r="152" fill="#fdf2f8"/>
+<circle cx="1130" cy="214" r="96" fill="#ecfdf5"/>
+<text x="44" y="46" fill="#4338ca" font-size="15" font-weight="700" text-anchor="start" letter-spacing="1.4">A COMPLETE READING GUIDE</text>
+<text x="42" y="107" fill="#132c42" font-size="54" font-weight="700" text-anchor="start">System design,</text>
+<text x="42" y="165" fill="#132c42" font-size="54" font-weight="700" text-anchor="start">step by step.</text>
+<text x="44" y="201" fill="#334155" font-size="22" font-weight="400" text-anchor="start">Simple ideas. Real production behavior.</text>
+<text x="44" y="228" fill="#334155" font-size="18" font-weight="400" text-anchor="start">26 weeks · 89 topics · 36 diagrams</text>
+<text x="786" y="67" fill="#132c42" font-size="25" font-weight="700" text-anchor="start">From a single request</text>
+<text x="786" y="101" fill="#132c42" font-size="25" font-weight="700" text-anchor="start">to systems that scale.</text>
+<path d="M800 155H1040" stroke="#cbd5e1" stroke-width="3"/>
+<circle cx="800" cy="155" r="17" fill="#2563eb"/>
+<text x="800" y="161" fill="#ffffff" font-size="16" font-weight="700" text-anchor="middle">1</text>
+<circle cx="848" cy="155" r="17" fill="#7c3aed"/>
+<text x="848" y="161" fill="#ffffff" font-size="16" font-weight="700" text-anchor="middle">2</text>
+<circle cx="896" cy="155" r="17" fill="#0f766e"/>
+<text x="896" y="161" fill="#ffffff" font-size="16" font-weight="700" text-anchor="middle">3</text>
+<circle cx="944" cy="155" r="17" fill="#c2410c"/>
+<text x="944" y="161" fill="#ffffff" font-size="16" font-weight="700" text-anchor="middle">4</text>
+<circle cx="992" cy="155" r="17" fill="#be185d"/>
+<text x="992" y="161" fill="#ffffff" font-size="16" font-weight="700" text-anchor="middle">5</text>
+<circle cx="1040" cy="155" r="17" fill="#4338ca"/>
+<text x="1040" y="161" fill="#ffffff" font-size="16" font-weight="700" text-anchor="middle">6</text>
+<text x="785" y="198" fill="#334155" font-size="18" font-weight="400" text-anchor="start">Understand → build → operate</text>
+<rect x="42" y="255" width="166" height="96" rx="12" fill="#eff6ff" stroke="#2563eb" stroke-opacity="0.22"/>
+<rect x="42" y="255" width="166" height="5" rx="2.5" fill="#2563eb"/>
+<text x="56" y="286" fill="#2563eb" font-size="16" font-weight="700" text-anchor="start">01</text>
+<text x="56" y="313" fill="#132c42" font-size="19" font-weight="700" text-anchor="start">Foundations</text>
+<text x="56" y="336" fill="#334155" font-size="15" font-weight="400" text-anchor="start">Weeks 1–4</text>
+<rect x="216" y="255" width="166" height="96" rx="12" fill="#f5f3ff" stroke="#7c3aed" stroke-opacity="0.22"/>
+<rect x="216" y="255" width="166" height="5" rx="2.5" fill="#7c3aed"/>
+<text x="230" y="286" fill="#7c3aed" font-size="16" font-weight="700" text-anchor="start">02</text>
+<text x="230" y="313" fill="#132c42" font-size="19" font-weight="700" text-anchor="start">Distributed</text>
+<text x="230" y="336" fill="#334155" font-size="15" font-weight="400" text-anchor="start">Weeks 5–10</text>
+<rect x="390" y="255" width="166" height="96" rx="12" fill="#f0fdfa" stroke="#0f766e" stroke-opacity="0.22"/>
+<rect x="390" y="255" width="166" height="5" rx="2.5" fill="#0f766e"/>
+<text x="404" y="286" fill="#0f766e" font-size="16" font-weight="700" text-anchor="start">03</text>
+<text x="404" y="313" fill="#132c42" font-size="19" font-weight="700" text-anchor="start">Reliability</text>
+<text x="404" y="336" fill="#334155" font-size="15" font-weight="400" text-anchor="start">Weeks 11–16</text>
+<rect x="564" y="255" width="166" height="96" rx="12" fill="#fff7ed" stroke="#c2410c" stroke-opacity="0.22"/>
+<rect x="564" y="255" width="166" height="5" rx="2.5" fill="#c2410c"/>
+<text x="578" y="286" fill="#c2410c" font-size="16" font-weight="700" text-anchor="start">04</text>
+<text x="578" y="313" fill="#132c42" font-size="19" font-weight="700" text-anchor="start">Cloud</text>
+<text x="578" y="336" fill="#334155" font-size="15" font-weight="400" text-anchor="start">Weeks 17–20</text>
+<rect x="738" y="255" width="166" height="96" rx="12" fill="#fdf2f8" stroke="#be185d" stroke-opacity="0.22"/>
+<rect x="738" y="255" width="166" height="5" rx="2.5" fill="#be185d"/>
+<text x="752" y="286" fill="#be185d" font-size="16" font-weight="700" text-anchor="start">05</text>
+<text x="752" y="313" fill="#132c42" font-size="19" font-weight="700" text-anchor="start">Retrieval</text>
+<text x="752" y="336" fill="#334155" font-size="15" font-weight="400" text-anchor="start">Weeks 21–23</text>
+<rect x="912" y="255" width="166" height="96" rx="12" fill="#eef2ff" stroke="#4338ca" stroke-opacity="0.22"/>
+<rect x="912" y="255" width="166" height="5" rx="2.5" fill="#4338ca"/>
+<text x="926" y="286" fill="#4338ca" font-size="16" font-weight="700" text-anchor="start">06</text>
+<text x="926" y="313" fill="#132c42" font-size="19" font-weight="700" text-anchor="start">AI agents</text>
+<text x="926" y="336" fill="#334155" font-size="15" font-weight="400" text-anchor="start">Weeks 24–26</text>
 </g>
-<g fill="#f7f3e9" font-size="13" font-weight="700" text-anchor="middle">
-<text x="61" y="227">1</text><text x="244" y="227">2</text>
-<text x="426" y="227">3</text><text x="609" y="227">4</text>
-<text x="792" y="227">5</text><text x="975" y="227">6</text>
-</g>
-<g fill="#d4dfdf" font-size="14" text-anchor="middle">
-<text x="80" y="266">Foundations</text><text x="244" y="266">Distributed systems</text>
-<text x="426" y="266">Reliability</text><text x="609" y="266">Cloud</text>
-<text x="792" y="266">Retrieval</text><text x="975" y="266">AI agents</text>
-</g></g></svg>
+</svg>
